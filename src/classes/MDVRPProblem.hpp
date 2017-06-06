@@ -1,9 +1,9 @@
-/* 
- * File:   MDVRPProblem.hpp
- * Author: fernando
- *
- * Created on July 21, 2014, 2:10 PM
- */
+/*
+* File:   MDVRPProblem.hpp
+* Author: fernando
+*
+* Created on July 21, 2014, 2:10 PM
+*/
 
 #ifndef MDVRPPROBLEM_HPP
 #define	MDVRPPROBLEM_HPP
@@ -17,6 +17,8 @@
 #include "../global.hpp"
 #include "Util.hpp"
 #include "Monitor.hpp"
+#include "../cuda/ManagedMatrix.h"
+#include "../cuda/ManagedArray.h"
 
 using namespace std;
 
@@ -34,7 +36,9 @@ private:
     float duration;
     vector<typedef_point> customerPoints;
     vector<typedef_point> depotPoints;
+
     vector<int> demand;
+    vector<int> serviceTime;
 
     typedef_vectorMatrix<int> nearestCustomerFromCustomer; // List of nearest customers from customers - CxC
     typedef_vectorMatrix<int> nearestDepotsFromCustomer; // List of nearest depots from customers - CxD
@@ -46,15 +50,25 @@ private:
     typedef_vectorMatrix<int> allocation; // In which depots customers are allocated [ c x d ]
 
     Monitor monitor = Monitor();
-    
+
     double avgCustomerDistance;
     double avgDepotDistance;
-    
-    typedef_vectorMatrix<int> granularNeighborhood;    
+
+    typedef_vectorMatrix<int> granularNeighborhood;
+
+    ManagedMatrix<float> mngCustomerDistances;
+    ManagedMatrix<float> mngDepotDistances;
+
+    ManagedArray<int> mngDemand;
+    ManagedArray<int> mngServiceTime;
+
+    int stm = 50;
+    cudaStream_t *streams = new cudaStream_t[50];
 
 public:
 
     MDVRPProblem();
+    ~MDVRPProblem();
 
     typedef_vectorMatrix<int>& getAllocation();
     float getBestKnowSolution() const;
@@ -65,16 +79,21 @@ public:
     vector<typedef_point>& getCustomerPoints();
     int getCustomers() const;
     void setCustomers(int customers);
+
     vector<int>& getDemand();
-    
+    vector<int>& getServiceTime();
+
     int getDepots() const;
     void setDepots(int depot);
-    
+
     typedef_vectorMatrix<float>& getDepotDistances();
     vector<typedef_point>& getDepotPoints();
 
     float getDuration() const;
     void setDuration(float duration);
+
+    float getDurationConditional(bool relaxed) const;
+    int getCapacityConditional(bool relaxed) const;
 
     std::string getInstCode() const;
     void setInstCode(std::string instCode);
@@ -92,7 +111,10 @@ public:
     void setAllocation(typedef_vectorMatrix<int> allocation);
     void setCustomerDistances(typedef_vectorMatrix<float> customerDistances);
     void setCustomerPoints(vector<typedef_point> customerPoints);
+
     void setDemand(vector<int> demand);
+    void setServiceTime(vector<int> serviceTime);
+
     void setDepotDistances(typedef_vectorMatrix<float> depotDistances);
     void setDepotPoints(vector<typedef_point> depotPoints);
     void setNearestCustomerFromCustomer(typedef_vectorMatrix<int> nearestCustomerFromCustomer);
@@ -111,10 +133,18 @@ public:
 
     void setAvgCustomerDistance(double avgCustomerDistance);
     double getAvgCustomerDistance() const;
-    
+
     typedef_vectorMatrix<int>& getGranularNeighborhood();
     void setGranularNeighborhood(typedef_vectorMatrix<int> granularNeighborhood);
-    
+
+    ManagedMatrix<float>& getMngCustomerDistances();
+    ManagedMatrix<float>& getMngDepotDistances();
+
+    ManagedArray<int>& getMngDemand();
+    ManagedArray<int>& getMngServiceTime();
+
+    cudaStream_t getStream(int id);
+
     void print();
     void printAllocation();
     void printAllocationDependecy();
@@ -129,10 +159,11 @@ private:
 
     void defineIntialCustomersAllocation();
     void setCustomerOnDepot(int customer);
-    
+
     void operateGranularNeighborhood();
 
+    void createStreams();
+    void destroyStreams();
 };
 
 #endif	/* MDVRPPROBLEM_HPP */
-

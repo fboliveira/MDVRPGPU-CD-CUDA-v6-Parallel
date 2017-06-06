@@ -1,7 +1,7 @@
-/* 
+/*
  * File:   IndividualsGroup.cpp
  * Author: Fernando B Oliveira <fboliveira25@gmail.com>
- * 
+ *
  * Created on July 23, 2014, 5:03 PM
  */
 
@@ -47,6 +47,14 @@ int IndividualsGroup::getDepot() const {
 
 void IndividualsGroup::setDepot(int depot) {
     this->depot = depot;
+}
+
+int IndividualsGroup::getId() const{
+    return this->id;
+}
+
+void IndividualsGroup::setId(int id) {
+    this->id = id;
 }
 
 AlgorithmConfig* IndividualsGroup::getConfig() const {
@@ -183,13 +191,16 @@ void IndividualsGroup::evaluate(bool removeConflicts, bool split) {
 
 }
 
-void IndividualsGroup::localSearch(bool fullImprovement) {
+void IndividualsGroup::localSearch(bool fullImprovement, bool runOnGPU) {
 
     int move, indU, indV, ru, rv;
     bool improved = false;
 
     if (fullImprovement)
         this->setForceSequential(true);
+
+    //if (runOnGPU)
+    //    cout << "IndividualsGroup::localSearch(): runOnGPU => " << this->getId() << endl;
 
     try {
 
@@ -265,12 +276,21 @@ void IndividualsGroup::localSearch(bool fullImprovement) {
                                 bool result;
                                 bool equal = indU == indV && ru == rv;
 
+                                //move = 4;
+
                                 do {
+                                    //cout << "Move: " << move << " - Equal: " << equal << endl;
                                     result = LocalSearch::processMoveDepotRoute(this->getIndividuals().at(indU).getRoutes().at(ru),
-                                            this->getIndividuals().at(indV).getRoutes().at(rv), move, equal);
+                                            this->getIndividuals().at(indV).getRoutes().at(rv), move, equal, runOnGPU, this->getId());
 
                                     if (result)
                                         improved = true;
+
+                                    //if (!equal)
+                                    //    if (move == 1 || move == 4)
+                                    //        break;
+                                    //if (runOnGPU)
+                                    //    break;
 
                                 } while (result == true && !this->getProblem()->getMonitor().isTerminated());
                             }
@@ -342,10 +362,10 @@ float IndividualsGroup::getIncompleteSolutionPenalty() {
 bool IndividualsGroup::isChanged() {
 
     //    for(auto ite = this->getIndividuals().begin(); ite != this->getIndividuals().end(); ++ite) {
-    //        
+    //
     //        if ((*ite).isChanged())
     //            return true;
-    //        
+    //
     //    }
 
     return true;
@@ -388,7 +408,7 @@ void IndividualsGroup::rank(int source) {
     //
     //    for(int i = 0; i < this->getIndividuals().size(); ++i) {
     //        if (this->getIndividuals().at(i).getRoutes().empty())
-    //            cout << "IndividualsGroup::sort() => empty: " << this->getIndividuals().at(i).getDepot() << "\t" << i 
+    //            cout << "IndividualsGroup::sort() => empty: " << this->getIndividuals().at(i).getDepot() << "\t" << i
     //                    << "\tCost: " << this->getIndividuals().at(i).getTotalCost() <<  endl;
     //    }
 
@@ -406,7 +426,7 @@ void IndividualsGroup::shrink(IndividualsGroup& source) {
 
     //    this->getIndividuals().erase( this->getIndividuals().begin() + this->getConfig()->getNumSubIndDepots(), this->getIndividuals().end());
     //    //cout << "Size shrink = " << this->getIndividuals().size() << endl;
-    //    
+    //
     //    for(int i = 0; i < this->getIndividuals().size(); ++i) {
     //        this->getIndividuals().at(i).setId(i);
     //        if (this->getIndividuals().at(i).getRoutes().empty())
@@ -430,6 +450,11 @@ void IndividualsGroup::shrink(IndividualsGroup& source) {
 
         if (this->getProblem()->getMonitor().isTerminated())
             break;
+
+        if (i >= this->getRanks().size()) {
+            //this->printRanks();
+            break;
+        }
 
         auto ite = std::find(cost.begin(), cost.end(),
                 Util::scaledFloat(this->getRanks().at(i).getCost()));
@@ -456,7 +481,7 @@ void IndividualsGroup::shrink(IndividualsGroup& source) {
         }
 
         i++;
-                
+
     }
 
 
@@ -492,17 +517,25 @@ void IndividualsGroup::printSolution() {
     });
 
     printf("\n\n");
-    
+
     for_each(this->getIndividuals().begin(), this->getIndividuals().end(), [] (Individual & individual) {
         individual.printVehicles();
     });
-    
+
 }
 
 void IndividualsGroup::printList() {
 
     for_each(this->getIndividuals().begin(), this->getIndividuals().end(), [] (Individual & individual) {
         printf("Id = %d\t%.2f\n", individual.getId(), individual.getTotalCost());
+    });
+
+}
+
+void IndividualsGroup::printRanks() {
+
+    for_each(this->getRanks().begin(), this->getRanks().end(), [](Rank & rank) {
+        rank.print();
     });
 
 }
@@ -551,14 +584,14 @@ void IndividualsGroup::removeConflictedCustomersFromDepots() {
                 if (this->getProblem()->getAllocation().at(customer).at(d) == 0)
                     d = -1;
             }*/
-            
+
             typedef_location bestLocation;
             bestLocation.cost = FLT_MAX;
-            
+
             for(d = 0; d< this->getProblem()->getDepots();++d) {
                 if (this->getProblem()->getAllocation().at(customer).at(d) > 0) {
                     typedef_location location = this->getIndividuals().at(d).getMinimalPositionToInsert(customer + 1);
-                    
+
                     if (location.cost < bestLocation.cost) {
                         bestLocation.depot = d;
                         bestLocation.cost = location.cost;
@@ -566,7 +599,7 @@ void IndividualsGroup::removeConflictedCustomersFromDepots() {
                     }
                 }
             }
-            
+
             this->getIndividuals().at( bestLocation.depot ).add(bestLocation.position, customer + 1);
 
         }

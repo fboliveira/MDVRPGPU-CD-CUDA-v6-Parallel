@@ -19,15 +19,17 @@ Route::Route(MDVRPProblem *problem, AlgorithmConfig *config, int depot, int rout
     this->setId(routeID);
     this->startValues();
     this->setTour(list<int>());
+    this->setRelaxDuration(false);
 
 }
 
 Route::Route(const Route& other) :
-tour(other.tour), cost(other.cost), penaltyDuration(other.penaltyDuration), 
-        penaltyDemand(other.penaltyDemand), id(other.id), depot(other.depot), 
-        demand(other.demand), problem(other.problem), config(other.config) {
+tour(other.tour), cost(other.cost), penaltyDuration(other.penaltyDuration),
+penaltyDemand(other.penaltyDemand), id(other.id), depot(other.depot),
+demand(other.demand), serviceTime(other.serviceTime),
+relaxDuration(other.relaxDuration),
+problem(other.problem), config(other.config) {
 }
-
 
 //Route::Route(const Route& route) {
 //
@@ -63,13 +65,35 @@ tour(other.tour), cost(other.cost), penaltyDuration(other.penaltyDuration),
  * Getters and Setters
  */
 
-float Route::getCost() const {
+float Route::getCost() {
+
+    if (this->cost < 0) {
+        cout << "Error! Cost < 0" << endl;
+        this->printSolution();
+    }
+
     return this->cost;
 }
 
 void Route::setCost(float cost) {
     this->cost = cost;
     this->updatePenalty();
+}
+
+int Route::getServiceTime() const {
+    return serviceTime;
+}
+
+void Route::setServiceTime(int serviceTime) {
+    this->serviceTime = serviceTime;
+}
+
+bool Route::isRelaxDuration() const {
+    return relaxDuration;
+}
+
+void Route::setRelaxDuration(bool relaxDuration) {
+    this->relaxDuration = relaxDuration;
 }
 
 float Route::getPenaltyDuration() const {
@@ -158,28 +182,31 @@ void Route::setCustomersPosition(vector<CustomerPosition>& position) {
 }
 
 void Route::startValues() {
-    this->setCost(0.0);
     this->setPenaltyDuration(0.0);
     this->setPenaltyDemand(0.0);
     this->setDemand(0);
+    this->setServiceTime(0);
+    this->setCost(0.0);
 }
 
 float Route::getTotalCost() {
-    return this->getCost() + this->getPenaltyDuration() + this->getPenaltyDemand();
+    float totalCost = this->getCost() + this->getPenaltyDuration() + this->getPenaltyDemand();
+    return totalCost;
 }
 
 void Route::updatePenalty() {
-
-    if (this->getProblem()->getDuration() > 0 && this->getCost() > this->getProblem()->getDuration())
-        this->setPenaltyDuration(this->getConfig()->getRouteDurationPenalty() * (this->getCost() - this->getProblem()->getDuration()));
-    else
-        this->setPenaltyDuration(0.0);
 
     if (this->getDemand() > this->getProblem()->getCapacity())
         this->setPenaltyDemand(this->getConfig()->getCapacityPenalty() * (this->getDemand() - this->getProblem()->getCapacity()));
     else
         this->setPenaltyDemand(0.0);
-
+    
+    float cost = this->getCost() + this->getServiceTime();
+    
+    if (this->getProblem()->getDuration() > 0 && cost > this->getProblem()->getDuration())
+        this->setPenaltyDuration(this->getConfig()->getRouteDurationPenalty() * (cost - this->getProblem()->getDuration()));
+    else
+        this->setPenaltyDuration(0.0);       
 }
 
 // Add customer at the front of the list
@@ -207,6 +234,9 @@ typedef_listIntIterator Route::addAtFront(int customer) {
 
     // Update demand
     this->setDemand(this->getDemand() + this->getProblem()->getDemand().at(customer - 1));
+    // Update service
+    this->setServiceTime(this->getServiceTime() + this->getProblem()->getServiceTime().at(customer - 1));
+
     this->setCost(this->getCost() - distFirstDep + distFirstNew + distNewDep);
 
     this->getTour().push_front(customer);
@@ -241,6 +271,8 @@ typedef_listIntIterator Route::addAtBack(int customer) {
 
     // Update demand
     this->setDemand(this->getDemand() + this->getProblem()->getDemand().at(customer - 1));
+    // Update service
+    this->setServiceTime(this->getServiceTime() + this->getProblem()->getServiceTime().at(customer - 1));
     this->setCost(this->getCost() - distLastDep + distLastNew + distNewDep);
 
     this->getTour().push_back(customer);
@@ -275,6 +307,9 @@ typedef_listIntIterator Route::addAfterPrevious(typedef_listIntIterator previous
 
             // Update demand    
             this->setDemand(this->getDemand() + this->getProblem()->getDemand().at(customer - 1));
+            // Update service
+            this->setServiceTime(this->getServiceTime() + this->getProblem()->getServiceTime().at(customer - 1));
+
             this->setCost(this->getCost() - distPrevAfter + distPrevNew + distNewAfter);
             return this->getTour().insert(nextPosition, customer);
 
@@ -342,12 +377,13 @@ typedef_listIntIterator Route::find(int customer) {
 
 void Route::remove(typedef_listIntIterator position) {
 
-    float previous, after, newCost;
+    float previous, after, newCost, cost = 0;
 
     int customer = *position;
 
     // Just one node
     if (customer == this->getTour().front() && customer == this->getTour().back()) {
+        this->getTour().clear();
         this->startValues();
     } else {
 
@@ -391,11 +427,22 @@ void Route::remove(typedef_listIntIterator position) {
         }
 
         this->setDemand(this->getDemand() - this->getProblem()->getDemand().at(customer - 1));
+        // Update service
+        this->setServiceTime(this->getServiceTime() - this->getProblem()->getServiceTime().at(customer - 1));
+
+        cost = this->getCost() - previous - after + newCost;
         this->setCost(this->getCost() - previous - after + newCost);
+
+        this->getTour().erase(position);
 
     }
 
-    this->getTour().erase(position);
+    //this->calculateCost();
+
+    if ( fabsf(cost - Util::scaledFloat(this->getCost())) > 0.1) {
+        this->printSolution();
+        cout << cost << endl;
+    }
 
 }
 
@@ -412,6 +459,7 @@ void Route::calculateCost() {
 
     int demand = 0;
     float cost = 0.0;
+    int service = 0;
 
     if (!this->getTour().empty()) {
 
@@ -441,11 +489,14 @@ void Route::calculateCost() {
             }
 
             demand += this->getProblem()->getDemand().at(customer - 1);
+            service += this->getProblem()->getServiceTime().at(customer - 1);
+
         }
 
     }
 
     this->setDemand(demand);
+    this->setServiceTime(service);
     this->setCost(cost);
 
 }
@@ -455,6 +506,7 @@ void Route::calculateCost() {
 float Route::calculateCost(typedef_listIntIterator start, typedef_listIntIterator end, int& demand) {
 
     float before, after, cost = 0;
+    int service = 0;
 
     demand = 0;
 
@@ -480,6 +532,7 @@ float Route::calculateCost(typedef_listIntIterator start, typedef_listIntIterato
         }
 
         demand += this->getProblem()->getDemand().at((*position) - 1);
+        //service += this->getProblem()->getServiceTime().at((*position) - 1);
 
         cost += before + after;
         //cout << endl;
@@ -491,78 +544,80 @@ float Route::calculateCost(typedef_listIntIterator start, typedef_listIntIterato
 
 void Route::changeCustomer(typedef_listIntIterator position, int newCustomer) {
 
-	float oldCustomerCost = 0, newCustomerCost = 0;
+    float oldCustomerCost = 0, newCustomerCost = 0;
 
-	int customer = (*position);
+    int customer = (*position);
 
-	// Just one node
-	if (customer == this->getTour().front() && customer == this->getTour().back()) {
-		this->remove(position);
-		this->addAtBack(newCustomer);
-	}
-	else {
+    // Just one node
+    if (customer == this->getTour().front() && customer == this->getTour().back()) {
+        this->remove(position);
+        this->addAtBack(newCustomer);
+    } else {
 
-		auto nextPosition = next(position);
+        auto nextPosition = next(position);
 
-		// If it is in the front of
-		if (position == this->getTour().begin()) {
+        // If it is in the front of
+        if (position == this->getTour().begin()) {
 
-			int nextCustomer = (*nextPosition);
+            int nextCustomer = (*nextPosition);
 
-			// D->C
-			oldCustomerCost += this->getProblem()->getDepotDistances().at(this->getDepot()).at(customer - 1);
-			// C->C+1
-			oldCustomerCost += this->getProblem()->getCustomerDistances().at(customer - 1).at(nextCustomer - 1);
+            // D->C
+            oldCustomerCost += this->getProblem()->getDepotDistances().at(this->getDepot()).at(customer - 1);
+            // C->C+1
+            oldCustomerCost += this->getProblem()->getCustomerDistances().at(customer - 1).at(nextCustomer - 1);
 
-			// D->NewC
-			newCustomerCost += this->getProblem()->getDepotDistances().at(this->getDepot()).at(newCustomer - 1);
-			// NewC->C+1
-			newCustomerCost += this->getProblem()->getCustomerDistances().at(newCustomer - 1).at(nextCustomer - 1);
+            // D->NewC
+            newCustomerCost += this->getProblem()->getDepotDistances().at(this->getDepot()).at(newCustomer - 1);
+            // NewC->C+1
+            newCustomerCost += this->getProblem()->getCustomerDistances().at(newCustomer - 1).at(nextCustomer - 1);
 
-		}
-		else if (next(position) == this->getTour().end()) { // Last one
+        } else if (next(position) == this->getTour().end()) { // Last one
 
-			auto prevPosition = prev(position);
-			int prevCustomer = (*prevPosition);
+            auto prevPosition = prev(position);
+            int prevCustomer = (*prevPosition);
 
-			// C-1->C
-			oldCustomerCost += this->getProblem()->getCustomerDistances().at(prevCustomer - 1).at(customer - 1);
-			// C->D
-			oldCustomerCost += this->getProblem()->getDepotDistances().at(this->getDepot()).at(customer - 1);
+            // C-1->C
+            oldCustomerCost += this->getProblem()->getCustomerDistances().at(prevCustomer - 1).at(customer - 1);
+            // C->D
+            oldCustomerCost += this->getProblem()->getDepotDistances().at(this->getDepot()).at(customer - 1);
 
-			// C-1->NewC
-			newCustomerCost += this->getProblem()->getCustomerDistances().at(prevCustomer - 1).at(newCustomer - 1);
+            // C-1->NewC
+            newCustomerCost += this->getProblem()->getCustomerDistances().at(prevCustomer - 1).at(newCustomer - 1);
 
-			// D->NewC
-			newCustomerCost += this->getProblem()->getDepotDistances().at(this->getDepot()).at(newCustomer - 1);
+            // D->NewC
+            newCustomerCost += this->getProblem()->getDepotDistances().at(this->getDepot()).at(newCustomer - 1);
 
-		}
-		else { // Anywhere...
+        } else { // Anywhere...
 
-			auto prevPosition = prev(position);
-			int nextCustomer = (*nextPosition);
-			int prevCustomer = (*prevPosition);
+            auto prevPosition = prev(position);
+            int nextCustomer = (*nextPosition);
+            int prevCustomer = (*prevPosition);
 
-			// C-1->C
-			oldCustomerCost += this->getProblem()->getCustomerDistances().at(prevCustomer - 1).at(customer - 1);
-			// C->C+1
-			oldCustomerCost += this->getProblem()->getCustomerDistances().at(customer - 1).at(nextCustomer - 1);
+            // C-1->C
+            oldCustomerCost += this->getProblem()->getCustomerDistances().at(prevCustomer - 1).at(customer - 1);
+            // C->C+1
+            oldCustomerCost += this->getProblem()->getCustomerDistances().at(customer - 1).at(nextCustomer - 1);
 
-			// C-1->NewC
-			newCustomerCost += this->getProblem()->getCustomerDistances().at(prevCustomer - 1).at(newCustomer - 1);
-			// NewC->C+1
-			newCustomerCost += this->getProblem()->getCustomerDistances().at(newCustomer - 1).at(nextCustomer - 1);
+            // C-1->NewC
+            newCustomerCost += this->getProblem()->getCustomerDistances().at(prevCustomer - 1).at(newCustomer - 1);
+            // NewC->C+1
+            newCustomerCost += this->getProblem()->getCustomerDistances().at(newCustomer - 1).at(nextCustomer - 1);
 
-		}
+        }
 
-		this->setDemand(this->getDemand() - this->getProblem()->getDemand().at(customer - 1)
-			+ this->getProblem()->getDemand().at(newCustomer - 1));
-		this->setCost(this->getCost() - oldCustomerCost + newCustomerCost);
+        this->setDemand(this->getDemand() - this->getProblem()->getDemand().at(customer - 1)
+                + this->getProblem()->getDemand().at(newCustomer - 1));
 
-		// Change value of customer
-		*position = newCustomer;
+        // Update service
+        this->setServiceTime(this->getServiceTime() - this->getProblem()->getServiceTime().at(customer - 1)
+                + this->getProblem()->getServiceTime().at(newCustomer - 1));
 
-	}
+        this->setCost(this->getCost() - oldCustomerCost + newCustomerCost);
+
+        // Change value of customer
+        *position = newCustomer;
+
+    }
 
 }
 
@@ -599,23 +654,62 @@ bool Route::isPenalized() {
     return this->getPenaltyDemand() > 0 || this->getPenaltyDuration() > 0;
 }
 
+float Route::getDuration() const {
+    return this->getProblem()->getDurationConditional(this->isRelaxDuration());
+}
+
+int Route::getCapacity() const {
+    return this->getProblem()->getCapacityConditional(this->isRelaxDuration());
+}
+
+void Route::routeToVector(int* route) {
+
+    int idx = 0;
+
+    for (auto i = this->getTour().begin(); i != this->getTour().end(); ++i) {
+        route[idx] = (*i);
+        idx++;
+    }
+
+}
+
+void Route::vectorToRoute(int* route, int size) {
+    this->vectorToRoute(route, 0, size - 1);
+}
+
+void Route::vectorToRoute(int* route, int first, int last) {
+
+    this->getTour().clear();
+    this->startValues();
+
+    for (int i = first; i <= last; ++i)
+        if (route[i] > 0)
+            this->addAtBack(route[i]);
+
+}
+
 void Route::print() {
 
     if (this->getTour().empty())
         return;
 
     cout << "[D: " << this->getDepot() << " - R: " << this->getId() << "] => ";
-    cout << "Cost: " << this->getCost() << " + P_Dur: " << this->getPenaltyDuration()
-            << " + P_Dem: " << this->getPenaltyDemand() << " => TOTAL = " << this->getTotalCost() << endl;
+    cout << "Cost: " << this->getCost()
+            << " + Service: " << this->getServiceTime()
+            << " + P_Dur: " << this->getPenaltyDuration()
+            << " + P_Dem: " << this->getPenaltyDemand()
+            << " => TOTAL = " << this->getTotalCost() + this->getServiceTime() << endl;
 
-    cout << "Demand: " << this->getDemand() << " => Route: D -> ";
+    cout << "Demand: " << this->getDemand() << " - Srv: " << this->getServiceTime() << " => Route: D -> ";
 
     int num = 0;
     MDVRPProblem * problem = this->getProblem();
 
     for_each(this->getTour().begin(), this->getTour().end(), [&num, problem] (int customer) {
 
-        cout << customer << " (" << problem->getDemand().at(customer - 1) << ") -> ";
+        cout << customer << " (" << problem->getDemand().at(customer - 1)
+                << " - Srv: " << problem->getServiceTime().at(customer - 1)
+                << ") -> ";
         num++;
     });
 
@@ -629,7 +723,7 @@ void Route::printSolution() {
         return;
 
     cout << this->getDepot() + 1 << "\t" << this->getId() + 1 << "\t";
-    printf("%.2f\t%d", this->getTotalCost(), this->getDemand());
+    printf("%.2f\t%d\t%d", this->getTotalCost(), this->getServiceTime(), this->getDemand());
 
     cout << "\t0 ";
 

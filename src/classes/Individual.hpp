@@ -137,14 +137,14 @@ public:
     void split();
     void routesToGenes();
 
-    void autoUpdate();
+    int autoUpdate(bool update);
     void updateParameters(bool improved);
     
     void removeRepeteadCustomer(int customer);
 
     typedef_location getMinimalPositionToInsert(int customer);
 
-    Individual copy();
+    Individual copy(bool data);
     void update(Individual& source);
         
     void print();

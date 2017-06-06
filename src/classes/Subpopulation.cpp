@@ -188,43 +188,20 @@ void Subpopulation::printPairing() {
 //}
 
 void Subpopulation::evolve() {
+    //this->evolveGPU();
+    this->evolveCPU();
+}
+
+void Subpopulation::evolveCPU() {
 
     // Version used in MONO and MULTI environments
 
     IndividualsGroup offsprings = IndividualsGroup(this->getProblem(), this->getConfig(), this->getDepot());
 
-    //    if (this->getConfig()->getProcessType() == Enum_Process_Type::MONO_THREAD) {
-    //
-    //
-    //
-    //        for_each(this->getIndividualsGroup().getIndividuals().begin(),
-    //                this->getIndividualsGroup().getIndividuals().end(), [&] (Individual & individual) {
-    //                    individual.evolve();
-    //                });
-    //
-    //    } else {
-
-    //while (this->getProblem()->getMonitor().isTerminated() == false) {
-
     if (this->getProblem()->getMonitor().isTerminated())
         return;
 
-    //if (this->isLocked())
-    //    return;
-
-    std::vector<std::thread> threads;
-
-    //        for_each(this->getIndividualsGroup().getIndividuals().begin(),
-    //                this->getIndividualsGroup().getIndividuals().end(), [&] (Individual & individual) {
-    //
-    //                    Lock *lock = this->getProblem()->getMonitor().getLock(this->getDepot(), individual.getId());
-    //
-    //                    threads.push_back(std::thread([&offsprings, &individual, lock]() {
-    //                        lock->wait(false);
-    //                        offsprings.add(individual.evolve());
-    //                        lock->notify(true);
-    //                    }));
-    //                });
+    //std::vector<std::thread> threads;
 
     for (auto ite = this->getIndividualsGroup().getIndividuals().begin(); ite !=
             this->getIndividualsGroup().getIndividuals().end(); ++ite) {
@@ -236,17 +213,13 @@ void Subpopulation::evolve() {
             break;
 
         if (this->getConfig()->getProcessType() == Enum_Process_Type::MULTI_THREAD) {
-            //threads.push_back(std::thread([&ind, &offsprings, lock]() {
             lock->wait(false);
         }
 
+        // Lambda
         for (int l = 0; l < this->getConfig()->getNumOffspringsPerParent(); ++l) {
 
             Individual offspring = ind.evolve();
-
-            //if (offspring.getGene().size() == 0) {
-            //    printf("Subpop = %d => offspring 2 = vazio!\n", ind.getDepot());
-            //}
 
             if (offspring.getGene().size() != 0)
                 offsprings.add(offspring);
@@ -255,28 +228,13 @@ void Subpopulation::evolve() {
                 break;
 
         }
-        //lock->notify(true);
-        //}));
+
     };
 
     if (this->getProblem()->getMonitor().isTerminated())
         return;
 
-    //for (auto& th : threads)
-    //    th.join();
-
-    //}
-
-    //        try {
-    //            this->getIndividualsGroup().merge(offsprings);
-    //            this->getIndividualsGroup().sort();
-    //            this->getIndividualsGroup().shrink();
-    //        } catch (exception &e) {
-    //            cout << "Subpopulation::evolve() => " << e.what() << '\n';
-    //        }
-
     this->getIndividualsGroup().shrink(offsprings);
-    //subpoplock->notify(true);
 
     for (auto ite = this->getIndividualsGroup().getIndividuals().begin(); ite !=
             this->getIndividualsGroup().getIndividuals().end(); ++ite) {
@@ -292,27 +250,145 @@ void Subpopulation::evolve() {
 
 }
 
-//Lock& Subpopulation::getLock(int id) {
-//    return this->getLocks()[id];
-//}
+void Subpopulation::evolveGPU() {
+
+    // Version used in GPU environment
+
+    if (this->getProblem()->getMonitor().isTerminated())
+        return;
+
+    //Lock* gpuLock = this->getProblem()->getMonitor().getGPULock();
+    //gpuLock->lock();
+
+    IndividualsGroup offsprings = IndividualsGroup(this->getProblem(), this->getConfig(), this->getDepot());
+    this->copyTOManaged();
+
+    // Lambda
+    for (int l = 0; l < this->getConfig()->getNumOffspringsPerParent(); ++l) {
+        CudaSubpop::evolve(this->getProblem(), mngPop, mngPopRes, this->getDepot(),
+            this->getConfig()->getNumSubIndDepots(), l);
+        copyFROMManaged(offsprings);
+
+        if (this->getProblem()->getMonitor().isTerminated())
+            break;
+    }
+
+    if (this->getProblem()->getMonitor().isTerminated())
+        return;
+
+    deallocateManaged();
+    //gpuLock->unlock();
+
+    localSearchOffsprings(offsprings);
+
+    if (this->getProblem()->getMonitor().isTerminated())
+        return;
+
+    this->getIndividualsGroup().shrink(offsprings);
+
+    for (auto ite = this->getIndividualsGroup().getIndividuals().begin(); ite !=
+        this->getIndividualsGroup().getIndividuals().end(); ++ite) {
+
+        if (this->getProblem()->getMonitor().isTerminated())
+            break;
+
+        Individual ind = *ite;
+        Lock *lock = this->getProblem()->getMonitor().getLock(this->getDepot(), ind.getId());
+        ind.setLocked(false);
+        lock->notify(true);
+    }
+
+}
 
 /*
  * Private Methods
  */
 
-//Lock* Subpopulation::getLocks() {
-//    return locks;
-//}
-//
-//void Subpopulation::createLockers() {
-//
-//    //    this->getLocks().resize(this->getConfig()->getNumSubIndDepots(), Lock());
-//
-//    //    for (int ind = 0; ind < this->getConfig()->getNumSubIndDepots(); ++ind) {
-//    //        Lock lock;
-//    //        this->getLocks().push_back(lock);
-//    //    }
-//
-//    locks = new Lock[this->getConfig()->getNumSubIndDepots()];
-//
-//}
+void Subpopulation::copyTOManaged() {
+
+    cudaStream_t stream = this->getProblem()->getStream(this->getDepot());
+
+    cudaDeviceSynchronize();
+    gpuErrchk(cudaMallocManaged(&mngPop, this->getIndividualsGroup().getIndividuals().size() * sizeof(StrIndividual), cudaMemAttachHost));
+    gpuErrchk(cudaMallocManaged(&mngPopRes, this->getIndividualsGroup().getIndividuals().size() * sizeof(StrIndividual), cudaMemAttachHost));
+    cudaStreamSynchronize(stream);
+    cudaDeviceSynchronize();
+
+    for (auto i = 0; i < this->getIndividualsGroup().getIndividuals().size(); ++i) {
+
+        mngPop[i].allocate(this->getIndividualsGroup().getIndividuals().at(i).getGene().size(), stream);
+        mngPopRes[i].allocate(this->getIndividualsGroup().getIndividuals().at(i).getGene().size(), stream);
+
+        for (int j = 0; j < mngPop[i].length; ++j) {
+            mngPop[i].gene[j] = this->getIndividualsGroup().getIndividuals().at(i).getGene().at(j);
+            mngPopRes[i].gene[j] = mngPop[i].gene[j];
+        }
+
+        mngPop[i].operations = this->getIndividualsGroup().getIndividuals().at(i).autoUpdate(false);
+        mngPopRes[i].operations = mngPop[i].operations;
+
+    }
+
+}
+
+void Subpopulation::copyFROMManaged(IndividualsGroup& offsprings) {
+
+    for (int i = 0; i < this->getConfig()->getNumSubIndDepots(); ++i) {
+        Individual ind = this->getIndividualsGroup().getIndividuals().at(i).copy(false);
+        for (int j = 0; j < mngPopRes[i].length; ++j)
+            ind.add(mngPopRes[i].gene[j]);
+
+        if (this->getProblem()->getMonitor().isTerminated())
+            break;
+
+        ind.evaluate(true);
+        offsprings.add(ind);
+    }
+
+}
+
+void Subpopulation::localSearchOffsprings(IndividualsGroup& offsprings) {
+
+    float cost;
+
+    for (auto i = 0; i < offsprings.getIndividuals().size(); ++i) {
+
+        cost = offsprings.getIndividuals().at(i).getTotalCost();
+
+        if (Random::randFloat() <= offsprings.getIndividuals().at(i).getMutationRatePLS()) {
+
+            offsprings.getIndividuals().at(i).localSearch();
+            offsprings.getIndividuals().at(i).routesToGenes();
+        }
+
+        if (this->getProblem()->getMonitor().isTerminated())
+            break;
+
+        if (offsprings.getIndividuals().at(i).getRoutes().size() == 0) {
+            offsprings.getIndividuals().at(i).evaluate(true);
+        }
+
+        if (Util::isBetterSolution(offsprings.getIndividuals().at(i).getTotalCost(), cost)) {
+            offsprings.getIndividuals().at(i).updateParameters(true);
+        }
+        else {
+            offsprings.getIndividuals().at(i).updateParameters(false);
+        }
+
+        if (this->getProblem()->getMonitor().isTerminated())
+            break;
+
+    }
+}
+
+void Subpopulation::deallocateManaged() {
+
+    for (int i = 0; i < this->getConfig()->getNumSubIndDepots(); ++i) {
+        mngPop[i].deallocate();
+        mngPopRes[i].deallocate();
+    }
+
+    cudaFree(mngPop);
+    cudaFree(mngPopRes);
+
+}

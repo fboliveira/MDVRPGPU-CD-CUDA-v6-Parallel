@@ -25,13 +25,17 @@ class Route {
     list<int> tour;
 
     float cost;
+    
     float penaltyDuration;
     float penaltyDemand;
 
     int id;
     int depot;
     int demand;
+    int serviceTime;
 
+    bool relaxDuration;
+    
     MDVRPProblem *problem; 
     AlgorithmConfig *config;      
 
@@ -42,11 +46,16 @@ public:
     //Route(const Route& route);
     
     Route(const Route& other);
-
     
-    float getCost() const;
+    float getCost();
     void setCost(float cost);
-
+    
+    int getServiceTime() const;
+    void setServiceTime(int serviceTime);
+    
+    bool isRelaxDuration() const;
+    void setRelaxDuration(bool relaxDuration);
+    
     float getPenaltyDuration() const;
     void setPenaltyDuration(float penalty);
 
@@ -108,6 +117,13 @@ public:
     
     bool isPenalized();
     
+    float getDuration() const;
+    int getCapacity() const;
+    
+    void routeToVector(int* route);
+    void vectorToRoute(int* route, int size);
+    void vectorToRoute(int* route, int first, int last);
+
     void print();    
     void printSolution();
     

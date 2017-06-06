@@ -218,16 +218,19 @@ void AlgorithmConfig::setParameters(MDVRPProblem *problem) {
     // Exibir ou nao informacoes durante o processo
     this->setDisplay(true);
 
-    if (isDebug()) { // Debug version
+    if (isDebug()) { // DEBUG_VERSION IS TRUE
+
+        this->setProcessType(MONO_THREAD);
+
         // Tempo limite de execucao (s) para criterioParada == TEMPO
-        this->setExecutionTime(10 * 60.0); // 1.800 seg
+        this->setExecutionTime(10 * 60.0);
 
         // Max time without update
         this->setMaxTimeWithoutUpdate(5 * 60.0); // 600 seg.
 
         // Numero de individuos da subpopulacao de depositos
         // Mu value
-        this->setNumSubIndDepots(3);
+        this->setNumSubIndDepots(20);
         // Lambda value
         this->setNumOffspringsPerParent(1);
 
@@ -245,7 +248,7 @@ void AlgorithmConfig::setParameters(MDVRPProblem *problem) {
         // Mu value
         this->setNumSubIndDepots(20);
         // Lambda value
-        this->setNumOffspringsPerParent(5);
+        this->setNumOffspringsPerParent(1);
 
         // Elite group size
         this->setEliteGroupLimit(50);

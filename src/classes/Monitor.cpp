@@ -188,6 +188,9 @@ Lock* Monitor::getSubpopLock(int subpopId) {
     return &subpopLocks[subpopId];
 }
 
+Lock* Monitor::getGPULock() {
+    return &gpuLock;
+}
 
 /*
  * Public Methods
@@ -287,6 +290,8 @@ void Monitor::terminateLocks() {
             this->getLock(d, c)->setTerminated(true);
     }
 
+    this->getGPULock()->setTerminated(true);
+
 }
 
 void Monitor::createLockIDs() {
@@ -297,5 +302,5 @@ void Monitor::createLockIDs() {
         for (int c = 0; c < NUM_MAX_CLI; ++c)
             this->getLock(d, c)->setId((d + 1) * 100 + c);
     }
-    
+   
 }

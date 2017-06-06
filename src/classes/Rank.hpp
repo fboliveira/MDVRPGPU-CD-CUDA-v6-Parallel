@@ -31,6 +31,8 @@ public:
     int getSource() const;
     void setSource(int source);
 
+    void print();
+
     static bool compare(Rank i, Rank j);
     
 private:

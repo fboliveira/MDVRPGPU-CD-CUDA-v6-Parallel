@@ -67,7 +67,7 @@ public:
     void printPairing();
 
     void evaluateSubpops(bool firstEvaluation);
-    void printEvolution();
+    void printEvolution(bool initialValue = false);
 
     bool isStopCriteriaMet();
     void writeLogToFile();

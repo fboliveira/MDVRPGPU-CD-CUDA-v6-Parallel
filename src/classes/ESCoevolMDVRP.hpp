@@ -34,6 +34,7 @@ private:
 
     static void testFunction1(MDVRPProblem* problem, AlgorithmConfig* config);
     static void testFunction2(MDVRPProblem* problem, AlgorithmConfig* config);
+    static void testProfile(MDVRPProblem* problem, AlgorithmConfig* config);
     static void testFunction(MDVRPProblem* problem, AlgorithmConfig* config, Community *community);
     
 };

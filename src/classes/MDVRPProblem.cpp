@@ -1,23 +1,27 @@
-/* 
- * File:   MDVRPProblem.cpp
- * Author: fernando
- * 
- * Created on July 21, 2014, 2:10 PM
- */
+/*
+* File:   MDVRPProblem.cpp
+* Author: fernando
+*
+* Created on July 21, 2014, 2:10 PM
+*/
 
 #include "MDVRPProblem.hpp"
 
 /*
- * Constructors
- */
+* Constructors
+*/
 
 MDVRPProblem::MDVRPProblem() {
+    //createStreams();
+}
 
+MDVRPProblem::~MDVRPProblem(){
+    //destroyStreams();
 }
 
 /*
- * Getters and Setters
- */
+* Getters and Setters
+*/
 
 typedef_vectorMatrix<int>& MDVRPProblem::getAllocation() {
     return this->allocation;
@@ -61,6 +65,10 @@ vector<int>& MDVRPProblem::getDemand() {
     return this->demand;
 }
 
+vector<int>& MDVRPProblem::getServiceTime() {
+    return serviceTime;
+}
+
 int MDVRPProblem::getDepots() const {
     return this->depots;
 }
@@ -85,6 +93,32 @@ float MDVRPProblem::getDuration() const {
 
 void MDVRPProblem::setDuration(float duration) {
     this->duration = duration;
+}
+
+float MDVRPProblem::getDurationConditional(bool relaxed) const {
+
+    float routeDuration;
+
+    if (false)
+        routeDuration = 2 * this->getDuration();
+    else
+        routeDuration = this->getDuration();
+
+    return routeDuration;
+
+}
+
+int MDVRPProblem::getCapacityConditional(bool relaxed) const {
+
+    int capacity;
+
+    if (relaxed)
+        capacity = 2 * this->getCapacity();
+    else
+        capacity = this->getCapacity();
+
+    return capacity;
+
 }
 
 std::string MDVRPProblem::getInstCode() const {
@@ -140,6 +174,10 @@ void MDVRPProblem::setDemand(vector<int> demand) {
     this->demand = demand;
 }
 
+void MDVRPProblem::setServiceTime(vector<int> serviceTime) {
+    this->serviceTime = serviceTime;
+}
+
 void MDVRPProblem::setDepotDistances(typedef_vectorMatrix<float> depotDistances) {
     this->depotDistances = depotDistances;
 }
@@ -160,15 +198,57 @@ void MDVRPProblem::setNearestDepotsFromCustomer(typedef_vectorMatrix<int> neares
     this->nearestDepotsFromCustomer = nearestDepotsFromCustomer;
 }
 
+double MDVRPProblem::getAvgCustomerDistance() const {
+    return avgCustomerDistance;
+}
+
+void MDVRPProblem::setAvgCustomerDistance(double avgCustomerDistance) {
+    this->avgCustomerDistance = avgCustomerDistance;
+}
+
+double MDVRPProblem::getAvgDepotDistance() const {
+    return avgDepotDistance;
+}
+
+void MDVRPProblem::setAvgDepotDistance(double avgDepotDistance) {
+    this->avgDepotDistance = avgDepotDistance;
+}
+
+typedef_vectorMatrix<int>& MDVRPProblem::getGranularNeighborhood() {
+    return granularNeighborhood;
+}
+
+void MDVRPProblem::setGranularNeighborhood(typedef_vectorMatrix<int> granularNeighborhood) {
+    this->granularNeighborhood = granularNeighborhood;
+}
+
+ManagedMatrix<float>& MDVRPProblem::getMngCustomerDistances() {
+    return mngCustomerDistances;
+}
+
+ManagedMatrix<float>& MDVRPProblem::getMngDepotDistances(){
+    return mngDepotDistances;
+}
+
+ManagedArray<int>& MDVRPProblem::getMngDemand() {
+    return mngDemand;
+}
+
+ManagedArray<int>& MDVRPProblem::getMngServiceTime() {
+    return mngServiceTime;
+}
+
 /*
- * Method
- */
+* Method
+*/
 
 void MDVRPProblem::allocateMemory() {
 
     this->setCustomerPoints(vector<typedef_point>(this->getCustomers()));
     this->setDepotPoints(vector<typedef_point>(this->getDepots()));
+
     this->setDemand(vector<int>(this->getCustomers()));
+    this->setServiceTime(vector<int>(this->getCustomers()));
 
     typedef_vectorMatrix<float> customerDistances = typedef_vectorMatrix<float>(this->getCustomers());
     for (int i = 0; i < this->getCustomers(); ++i)
@@ -208,7 +288,7 @@ void MDVRPProblem::allocateMemory() {
         allocation.at(i).resize(this->getDepots());
 
     this->setAllocation(allocation);
-    
+
     // Granular Neighborhoods
     typedef_vectorMatrix<int> granularNeighborhood = typedef_vectorMatrix<int>(this->getCustomers()); // allocate_matrix_int(clientes, depositos);
 
@@ -216,7 +296,22 @@ void MDVRPProblem::allocateMemory() {
         granularNeighborhood.at(i).resize(this->getCustomers());
 
     this->setGranularNeighborhood(granularNeighborhood);
-       
+
+    // GPU allocation
+    this->getMngCustomerDistances().setLines(this->getCustomers());
+    this->getMngCustomerDistances().setColumns(this->getCustomers());
+    this->getMngCustomerDistances().init();
+
+    this->getMngDepotDistances().setLines(this->getDepots());
+    this->getMngDepotDistances().setColumns(this->getCustomers());
+    this->getMngDepotDistances().init();
+
+    this->getMngDemand().setCols(this->getCustomers());
+    this->getMngDemand().init();
+
+    this->getMngServiceTime().setCols(this->getCustomers());
+    this->getMngServiceTime().init();
+
 }
 
 bool MDVRPProblem::processInstanceFiles(char* dataFile, char* solutionFile, char* instCode) {
@@ -226,7 +321,7 @@ bool MDVRPProblem::processInstanceFiles(char* dataFile, char* solutionFile, char
     int i, type, vehicles, customers, depots, valueInt;
     float valueFloat;
     typedef_point point;
-
+    //char null;
 
     data = fopen(dataFile, "r");
     solution = fopen(solutionFile, "r");
@@ -268,11 +363,19 @@ bool MDVRPProblem::processInstanceFiles(char* dataFile, char* solutionFile, char
     }
 
     // Customer informations
+    int id, service, demand;
+
     for (i = 0; i < this->getCustomers(); ++i) {
-        fscanf(data, "%d %f %f %d %d", &type, &point.x, &point.y, &type, &valueInt);
+        // Id, X, Y, service duration, demand
+        fscanf(data, "%d %f %f %d %d", &id, &point.x, &point.y, &service, &demand);
 
         this->getCustomerPoints().at(i) = point;
-        this->getDemand().at(i) = valueInt;
+
+        this->getServiceTime().at(i) = service;
+        this->getDemand().at(i) = demand;
+
+        this->getMngDemand().set(i, demand);
+        this->getMngServiceTime().set(i, service);
 
         while (getc(data) != '\n');
     }
@@ -293,10 +396,10 @@ bool MDVRPProblem::processInstanceFiles(char* dataFile, char* solutionFile, char
     this->defineIntialCustomersAllocation();
 
     this->operateGranularNeighborhood();
-    
+
     fclose(solution);
     fclose(data);
-    
+
     return true;
 
 }
@@ -313,16 +416,18 @@ void MDVRPProblem::calculateMatrixDistance() {
             if (i != j) {
 
                 dist = Util::calculateEucDist2D(this->getCustomerPoints().at(i).x,
-                        this->getCustomerPoints().at(i).y,
-                        this->getCustomerPoints().at(j).x,
-                        this->getCustomerPoints().at(j).y);
+                    this->getCustomerPoints().at(i).y,
+                    this->getCustomerPoints().at(j).x,
+                    this->getCustomerPoints().at(j).y);
 
                 this->getCustomerDistances().at(i).at(j) = dist;
+                this->getMngCustomerDistances().set(i, j, dist);
                 totalDistance += dist;
-            } else {
+            }
+            else {
                 // Seta distancia para I == J para INT_MAX para recuperar o
                 // menor
-                this->getCustomerDistances().at(i).at(j) = pow(10, 3);
+                this->getCustomerDistances().at(i).at(j) = powf(10, 3);
             }
         }
     }
@@ -331,23 +436,24 @@ void MDVRPProblem::calculateMatrixDistance() {
     totalDistance /= (double)(this->getCustomers() * this->getCustomers());
     this->setAvgCustomerDistance(totalDistance);
     totalDistance = 0.0;
-    
+
     // Calcula a distancia dos clientes para o deposito
     for (i = 0; i < this->getDepots(); ++i) {
 
         for (j = 0; j < this->getCustomers(); ++j) {
 
             dist = Util::calculateEucDist2D(this->getDepotPoints().at(i).x,
-                    this->getDepotPoints().at(i).y,
-                    this->getCustomerPoints().at(j).x,
-                    this->getCustomerPoints().at(j).y);
+                this->getDepotPoints().at(i).y,
+                this->getCustomerPoints().at(j).x,
+                this->getCustomerPoints().at(j).y);
 
             this->getDepotDistances().at(i).at(j) = dist;
+            this->getMngDepotDistances().set(i, j, dist);
             totalDistance += dist;
 
         }
     }
-    
+
     // Relation from customers to depots
     totalDistance /= (double)(this->getCustomers() * 1.0);
     this->setAvgDepotDistance(totalDistance);
@@ -479,7 +585,7 @@ void MDVRPProblem::setCustomerOnDepot(int customer) {
     float min = this->getDepotDistances()[d][customer];
 
     // Distance max with delta = 20%
-    min = min * 1.2;
+    min = min * 1.2f;
 
     // Get the depot(s) with this distance and set
     for (d = 0; d < this->getDepots(); ++d)
@@ -498,28 +604,11 @@ Monitor& MDVRPProblem::getMonitor() {
     return monitor;
 }
 
-double MDVRPProblem::getAvgCustomerDistance() const {
-    return avgCustomerDistance;
-}
+cudaStream_t MDVRPProblem::getStream(int id) {
+    if (streams[id] == NULL)
+        cudaStreamCreate(&streams[id]);
 
-void MDVRPProblem::setAvgCustomerDistance(double avgCustomerDistance) {
-    this->avgCustomerDistance = avgCustomerDistance;
-}
-
-double MDVRPProblem::getAvgDepotDistance() const {
-    return avgDepotDistance;
-}
-
-void MDVRPProblem::setAvgDepotDistance(double avgDepotDistance) {
-    this->avgDepotDistance = avgDepotDistance;
-}
-
-typedef_vectorMatrix<int>& MDVRPProblem::getGranularNeighborhood() {
-    return granularNeighborhood;
-}
-
-void MDVRPProblem::setGranularNeighborhood(typedef_vectorMatrix<int> granularNeighborhood) {
-    this->granularNeighborhood = granularNeighborhood;
+    return streams[id];
 }
 
 void MDVRPProblem::print() {
@@ -536,20 +625,20 @@ void MDVRPProblem::print() {
     printf("\n\n");
 
     for (i = 0; i < this->getDepots(); ++i)
-        printf("D: %i -> Pontos: (%f, %f) -- Capacidade: %d -- Duracao: %.2f\n", i + 1,
-            this->getDepotPoints()[i].x, this->getDepotPoints()[i].y, this->getCapacity(), this->getDuration());
+        printf("D: %i -> Pontos: (%.2f, %.2f) -- Capacidade: %d -- Duracao: %.2f\n", i + 1,
+        this->getDepotPoints()[i].x, this->getDepotPoints()[i].y, this->getCapacity(), this->getDuration());
 
     printf("\n\n");
 
     for (i = 0; i < this->getCustomers(); ++i)
-        printf("Cliente: %d - Pontos: (%f, %f) - Demanda: %d\n", i + 1, this->getCustomerPoints()[i].x,
-            this->getCustomerPoints()[i].y, this->getDemand()[i]);
+        printf("Cliente: %d - Pontos: (%.2f, %.2f) - Demanda: %d - Servico: %d\n", i + 1, this->getCustomerPoints()[i].x,
+        this->getCustomerPoints()[i].y, this->getDemand()[i], this->getServiceTime().at(i));
 
     // Distancia
     printf("\n\nMatriz de distancias - DEPOSITOS x CLIENTES:\n\n");
     for (i = 0; i < this->getDepots(); ++i) {
         for (j = 0; j < this->getCustomers(); ++j) {
-            printf("%.2f\t", this->getDepotDistances()[i][j]);
+            printf("%.4f\t", this->getDepotDistances()[i][j]);
         }
         printf("\n");
     }
@@ -558,7 +647,7 @@ void MDVRPProblem::print() {
     printf("\n\nMatriz de distancias - CLIENTES x CLIENTES:\n\n");
     for (i = 0; i < this->getCustomers(); ++i) {
         for (j = 0; j < this->getCustomers(); ++j) {
-            printf("%.2f\t", this->getCustomerDistances()[i][j]);
+            printf("%.4f\t", this->getCustomerDistances()[i][j]);
         }
         printf("\n");
     }
@@ -601,63 +690,75 @@ void MDVRPProblem::printAllocation() {
         printf("Customer : %d => ", i + 1);
         Util::print(this->getAllocation()[i]);
     }
-    
+
 }
 
 void MDVRPProblem::printAllocationDependecy() {
-    
+
     int dep = 0, count;
-    
+
     for (int i = 0; i < this->getCustomers(); ++i) {
         //printf("Customer : %d => ", i + 1);
         //Util::print(this->getAllocation()[i]);
         count = 0;
-        for(int d = 0; d < this->getDepots(); ++d) {
+        for (int d = 0; d < this->getDepots(); ++d) {
             if (this->getAllocation().at(i).at(d) > 0)
                 count++;
         }
-        
+
         if (count > 1)
             dep++;
     }
-    
+
     printf("%s: %d/%d\n", this->getInstCode().c_str(), dep, this->getCustomers());
-    
+
 }
 
 void MDVRPProblem::operateGranularNeighborhood() {
 
     // granularity threshold value θ = βz (where β is a sparsification factor and z is the average cost of the edges)
-    float beta = 1.2;
-    
+    float beta = 1.2f;
+
     // distance factorφij =2cij +δj(∀i ∈ I, j ∈ J)isnotgreaterthanthemaximumduration D.
-    
-    float threshold = beta * this->getAvgCustomerDistance();
-    
+
+    double threshold = beta * this->getAvgCustomerDistance();
+
     /*
     cout << endl << endl;
     cout << "Avg Customer Distance: " << this->getAvgCustomerDistance() << endl;
     cout << "Granularity threshold: " << threshold << endl;
     cout << endl << endl;
-    */ 
-    
-    for(int i = 0; i < this->getCustomers(); ++i) {
-        for(int j = 0; j < this->getCustomers(); ++j) {
-            
+    */
+
+    for (int i = 0; i < this->getCustomers(); ++i) {
+        for (int j = 0; j < this->getCustomers(); ++j) {
+
             this->getGranularNeighborhood().at(i).at(j) = 1;
-            
+
             if (i != j)
                 if (2 * this->getCustomerDistances().at(i).at(j) <= threshold)
                     this->getGranularNeighborhood().at(i).at(j) = 1;
         }
     }
-    
+
     /*
     for(int i = 0; i < this->getCustomers(); ++i) {
-        for(int j = 0; j < this->getCustomers(); ++j) {
-            cout << d_factor[i][j] << " ";
-        }
-        cout << endl;
+    for(int j = 0; j < this->getCustomers(); ++j) {
+    cout << d_factor[i][j] << " ";
     }
-    */                             
+    cout << endl;
+    }
+    */
+}
+
+void MDVRPProblem::createStreams() {
+    for (int i = 0; i < stm; ++i)
+        cudaStreamCreate(&streams[i]);
+}
+
+void MDVRPProblem::destroyStreams() {
+    for (int i = 0; i < stm; ++i)
+        cudaStreamDestroy(streams[i]);
+
+    delete streams;
 }

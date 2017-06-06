@@ -28,6 +28,8 @@ class EliteGroup {
     
     bool changed;
     bool locked = false;
+
+    int runGPUonID;
     
 public:
     

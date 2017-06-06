@@ -28,6 +28,7 @@ class IndividualsGroup {
     AlgorithmConfig *config;
     
     int depot;
+    int id;
 
     vector<Individual> individuals;
     
@@ -47,7 +48,10 @@ public:
 
     int getDepot() const;
     void setDepot(int depot);
-        
+    
+    int getId() const;
+    void setId(int id);
+
     AlgorithmConfig* getConfig() const;
     void setConfig(AlgorithmConfig *config);
 
@@ -80,7 +84,7 @@ public:
     size_t getNumTotalCustomersFromRoutes();
     
     void evaluate(bool removeConflicts, bool split);
-    void localSearch(bool fullImprovement = false);
+    void localSearch(bool fullImprovement = false, bool runOnGPU = false);
     
     float getTotalCost();
     float getIncompleteSolutionPenalty();
@@ -96,6 +100,7 @@ public:
     void print(bool gene);
     void printSolution();
     void printList();
+    void printRanks();
     
 private:
 

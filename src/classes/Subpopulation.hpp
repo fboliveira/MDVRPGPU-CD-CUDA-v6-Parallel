@@ -22,6 +22,9 @@ using namespace std;
 #include "EliteGroup.hpp"
 #include "Lock.hpp"
 
+#include "../cuda/cuda_types.h"
+#include "../cuda/cuda_subpop.h"
+
 class Subpopulation {
 
     MDVRPProblem *problem;
@@ -35,6 +38,9 @@ class Subpopulation {
     vector<Pairing> pairing;
     
     bool locked = false;
+
+    StrIndividual *mngPop;
+    StrIndividual *mngPopRes;
     
     //Lock* locks;
         
@@ -77,6 +83,8 @@ public:
     void printPairing();
     
     void evolve();
+    void evolveCPU();
+    void evolveGPU();
 
     //Lock& getLock(int id);
     
@@ -84,7 +92,11 @@ private:
 
     //Lock* getLocks();
     //void createLockers();
-    
+    void copyTOManaged();
+    void copyFROMManaged(IndividualsGroup& offsprings);
+    void localSearchOffsprings(IndividualsGroup& offsprings);
+    void deallocateManaged();
+
 };
 
 #endif	/* SUBPOPULATION_HPP */

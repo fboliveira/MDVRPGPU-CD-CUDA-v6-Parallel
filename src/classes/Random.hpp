@@ -31,6 +31,7 @@ public:
     static void randPermutation(int size, int min, vector<int>& elements);
     static void randTwoNumbers(int min, int max, int& n1, int& n2);
     static int discreteDistribution(int min, int max);
+    static long int generateSeed();
     
 private:
 

@@ -60,6 +60,8 @@ void Lock::unlock() {
     this->getMutexLocker().unlock();
 }
 
+// http://www.cplusplus.com/reference/condition_variable/condition_variable/
+
 void Lock::wait(bool readyState) {
 
     //printf("Lock::wait::start => %d -- %d - %d\n", this->getId(), this->isReady(), readyState);

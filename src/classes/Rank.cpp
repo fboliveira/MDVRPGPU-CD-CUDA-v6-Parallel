@@ -57,6 +57,10 @@ void Rank::setCost(float cost) {
  * Public Methods
  */
 
+void Rank::print() {
+    cout << "S: " << this->getSource() << " - id: " << this->getId() << " - Cost: " << this->getCost() << endl;
+}
+
 bool Rank::compare(Rank i, Rank j) {
     return Util::isBetterSolution(i.getCost(), j.getCost());
 }

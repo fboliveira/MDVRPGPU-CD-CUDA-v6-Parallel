@@ -1,4 +1,4 @@
-/* 
+/*
  * File:   global.h
  * Author: fernando
  *
@@ -18,23 +18,23 @@ using namespace std;
 #define	GLOBAL_H
 
 // INSTANCE TEST
-#define INST_TEST "pr10"
+#define INST_TEST "p24"
 
-#define SOURCE 1
+#define SOURCE 4
 #define DEBUG_VERSION false
 
 #if SOURCE==1
 // LOCAL
-#define BASE_DIR_DAT "/Users/fernando/Temp/MDVRP/dat/" 
-#define BASE_DIR_SOL "/Users/fernando/Temp/MDVRP/sol/" 
+#define BASE_DIR_DAT "/Users/fernando/Temp/MDVRP/dat/"
+#define BASE_DIR_SOL "/Users/fernando/Temp/MDVRP/sol/"
 //#define LOG_RUN_FILE "/Users/fernando/Temp/MDVRP/experiments/mdvrpcpu-teste.txt"
 #define LOG_RUN_FILE "/Users/fernando/Temp/MDVRP/mdvrpcpu-20.txt"
 
 #elif SOURCE==2
 
 // UFMG
-#define BASE_DIR_DAT "/home/fernando/experiments/instances/dat/" 
-#define BASE_DIR_SOL "/home/fernando/experiments/instances/sol/" 
+#define BASE_DIR_DAT "/home/fernando/experiments/instances/dat/"
+#define BASE_DIR_SOL "/home/fernando/experiments/instances/sol/"
 #define LOG_RUN_FILE "/home/fernando/experiments/mdvrpcpu-99-01-03.txt"
 
 #elif SOURCE==3
@@ -76,14 +76,15 @@ enum Enum_StopCriteria
 enum Enum_Process_Type
 {
     MONO_THREAD,
-    MULTI_THREAD
+    MULTI_THREAD,
+    GPU_VERSION
 };
 
 enum Enum_Local_Search_Type
 {
     RANDOM,
     SEQUENTIAL,
-    NOT_APPLIED            
+    NOT_APPLIED
 };
 
 template<class T>
@@ -119,5 +120,15 @@ typedef struct {
     typedef_vectorIntIterator position;
     float cost;
 } typedef_location;
+
+template<typename T> struct matrix_special
+{
+    T *data;
+    int lines;
+    int columns;
+
+};
+
+//--template matrix_special<float>;
 
 #endif	/* GLOBAL_H */

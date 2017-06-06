@@ -163,10 +163,11 @@ void EliteGroup::localSearch() {
 
     if (this->getConfig()->getProcessType() == Enum_Process_Type::MONO_THREAD) {
 
+        // MONO_THREAD version
         for_each(this->getEliteGroup().begin(), this->getEliteGroup().end(), [&](IndividualsGroup & eliteIndividual) {
 
             if (!this->getProblem()->getMonitor().isTerminated()) {
-                eliteIndividual.localSearch();
+                eliteIndividual.localSearch(false, true);
 
                 if (eliteIndividual.getTotalCost() != this->getBest().getTotalCost()) {
 
@@ -175,7 +176,7 @@ void EliteGroup::localSearch() {
 
                 }
 
-                eliteIndividual.localSearch(true);
+                eliteIndividual.localSearch(true, true);
 
                 if (Util::isBetterSolution(eliteIndividual.getTotalCost(), this->getBest().getTotalCost())) {
                     this->setBest(eliteIndividual);
@@ -192,19 +193,28 @@ void EliteGroup::localSearch() {
         //printf("Start: EliteGroup::localSearch();\n");
         std::vector<std::thread> threads;
 
+        for (int i = 0; i < (int)this->getPool().size(); ++i) {
+            this->getPool().at(i).setId(i);
+        }
+
+        runGPUonID = Random::randIntBetween(0, (int)this->getPool().size() - 1);
+
+        // MULTI_THREAD+GPU version
         for_each(this->getPool().begin(), this->getPool().end(), [&](IndividualsGroup & eliteIndividual) {
 
             if (!this->getProblem()->getMonitor().isTerminated()) {
                 threads.push_back(std::thread([&eliteIndividual, this]() {
 
-                    eliteIndividual.localSearch();
+                    eliteIndividual.localSearch(false, false);
 
                     if (eliteIndividual.getTotalCost() != this->getBest().getTotalCost()) {
                         PathRelinking path = PathRelinking(this->getProblem(), this->getConfig());
                         path.operate(eliteIndividual, this->getBest());
                     }
 
-                    eliteIndividual.localSearch(true);
+                    int id = Random::randIntBetween(0, (int)this->getPool().size() - 1);
+
+                    eliteIndividual.localSearch(true, eliteIndividual.getId() == id);
 
                 }));
             }
@@ -268,7 +278,10 @@ void EliteGroup::manager() {
 
             this->getProblem()->getMonitor().getMutexLocker().unlock();
             this->localSearch();
-            //this->getEliteGroup().clear();
+
+            int first = (int)this->getEliteGroup().size() / 2;
+            //cout << "EliteGroup::manager(): Removing " << (int)this->getEliteGroup().size() - first + 1 << " elite solutions." << endl;
+            this->getEliteGroup().erase(this->getEliteGroup().begin() + first, this->getEliteGroup().end());
             this->getPool().clear();
 
         }

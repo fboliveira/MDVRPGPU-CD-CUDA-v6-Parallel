@@ -71,6 +71,19 @@ int main(int argc, char** argv) {
     /* initialize random seed: */
     Random::randomize();
 
+    int deviceCount = 0;
+    cudaGetDeviceCount(&deviceCount);
+
+    if (deviceCount > 0)
+    {
+        cudaSetDevice(0);
+    }
+    else
+    {
+        printf("error: invalid device choosen\n");
+        return -1;
+    }
+
     // Read data file
     if (!problem->processInstanceFiles(dat, sol, inst)) {
         //std::cout << "Press enter to continue ...";
@@ -79,9 +92,10 @@ int main(int argc, char** argv) {
     }
     
     // Geracao de dados de alocacao - allocation N/M
+    //problem->print();
     //problem->printAllocation();
-    problem->printAllocationDependecy();
-    return 0;
+    //problem->printAllocationDependecy();
+    //return 0;
 
     // # Configuracoes para execucao
     AlgorithmConfig *config = new AlgorithmConfig();
@@ -101,6 +115,10 @@ int main(int argc, char** argv) {
     //printf("INSTANCIA...: %s\n", problem->getInstCode().c_str());
     //problem->print();
     //LocalSearch::testFunction(problem, config);
+    //problem->getMngDepotDistances().print();
+    //problem->getMngDemand().print();
+    //problem->getMngServiceTime().print();
+    //getchar();
     //return(0);
 
 
@@ -143,7 +161,7 @@ int main(int argc, char** argv) {
 
     printf("\n====Fatores para avaliacao====\n");
     printf("Tam Subpop..: %d\n", config->getNumSubIndDepots());
-    //printf("Lambda......: %d\n", config->getNumOffspringsPerParent());
+    printf("Lambda......: %d\n", config->getNumOffspringsPerParent());
 
     printf("Tempo max...: %.2f seg. ", config->getExecutionTime());
     printf("(ou %.2f seg. sem atualizacao)\n", config->getMaxTimeWithoutUpdate());
@@ -168,5 +186,8 @@ int main(int argc, char** argv) {
     delete problem;
     delete config;
 
+    cudaDeviceReset();
+
+    //getchar();
     return EXIT_SUCCESS;
 }

@@ -106,7 +106,7 @@ void PathRelinking::operate(IndividualsGroup& initialSolution, IndividualsGroup&
                 //newSolution.getIndividuals().at(pg.getDepot()).getRoutes().at(route).addAtFront(pg.getCustomer());
                 LocalSearch::operateMoves(this->getProblem(), this->getConfig(), 
                         newSolution.getIndividuals().at(pg.getDepot()).getRoutes().at(route),
-                        newSolution.getIndividuals().at(pg.getDepot()).getRoutes().at(route), true);
+                        newSolution.getIndividuals().at(pg.getDepot()).getRoutes().at(route), true, false, -1);
 
                 if (Util::isBetterSolution(newSolution.getTotalCost(), initialSolution.getTotalCost())) {
                     // Move

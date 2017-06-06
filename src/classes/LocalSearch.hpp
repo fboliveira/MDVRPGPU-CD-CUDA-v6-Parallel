@@ -13,6 +13,9 @@
 #include "MDVRPProblem.hpp"
 #include "AlgorithmConfig.hpp"
 #include "Route.hpp"
+#include "Individual.hpp"
+
+#include "../cuda/cuda_local_search.h"
 
 class LocalSearch {
 
@@ -30,15 +33,15 @@ public:
 //    MDVRPProblem* getProblem() const;
 //    void setProblem(MDVRPProblem *problem);
     
-    static bool processMoveDepotRoute(Route& ru, Route& rv, int move, bool equal);
-    static bool operateMoves(MDVRPProblem *problem, AlgorithmConfig *config, Route& ru, Route& rv, bool equal);
-    
-    
+    static bool processMoveDepotRoute(Route& ru, Route& rv, int move, bool equal, bool gpu, int streamId);
+    static bool operateMoves(MDVRPProblem *problem, AlgorithmConfig *config, Route& ru, Route& rv, 
+        bool equal, bool gpu, int streamId);
+        
 private:
 
-    static bool operateMoveDepotRouteFacade(Route& ru, Route& rv, int move, bool equal);
+    static bool operateMoveDepotRouteFacade(Route& ru, Route& rv, int move, bool equal, bool gpu, int streamId);
     static bool operateMoveDepotRouteM1(Route& ru, Route& rv, bool equal);
-    static bool operateMoveDepotRouteM2(Route& ru, Route& rv, bool equal, bool operateM3 = false);
+    static bool operateMoveDepotRouteM2(Route& ru, Route& rv, bool equal, bool operateM3);
     static bool operateMoveDepotRouteM3(Route& ru, Route& rv, bool equal);
     static bool operateMoveDepotRouteM4(Route& ru, Route& rv, bool equal);
     static bool operateMoveDepotRouteM5(Route& ru, Route& rv, bool equal);

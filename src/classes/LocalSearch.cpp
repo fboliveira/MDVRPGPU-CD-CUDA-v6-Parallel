@@ -6,89 +6,44 @@
  */
 
 #include "LocalSearch.hpp"
-#include "Individual.hpp"
+
+#define CHECK_DEMAND true
 
 /*
  * Constructors and Destructor
  */
 
-//LocalSearch::LocalSearch(AlgorithmConfig* config, MDVRPProblem* problem) :
-//config(config), problem(problem) {
-//}
-//
-//LocalSearch::LocalSearch(const LocalSearch& orig) :
-//problem(orig.problem), config(orig.config) {
-//
-//}
-//
-//LocalSearch::~LocalSearch() {
-//}
-
-/*
- * Getters and Setters
- */
-
-//AlgorithmConfig* LocalSearch::getConfig() const {
-//    return this->config;
-//}
-//
-//void LocalSearch::setConfig(AlgorithmConfig* config) {
-//    this->config = config;
-//}
-//
-//MDVRPProblem* LocalSearch::getProblem() const {
-//    return this->problem;
-//}
-//
-//void LocalSearch::setProblem(MDVRPProblem* problem) {
-//    this->problem = problem;
-//}
-
 /*
  * Public Methods
  */
-
-
-
-bool LocalSearch::processMoveDepotRoute(Route& ru, Route& rv, int move, bool equal) {
+bool LocalSearch::processMoveDepotRoute(Route& ru, Route& rv, int move, bool equal, bool gpu, int streamId) {
 
     Route newRu = ru;
     Route newRv = rv;
 
-    bool result = operateMoveDepotRouteFacade(newRu, newRv, move, equal);
+    if (ru.getTour().size() == 0)
+        return false;
 
-    //--float costU = newRu.getTotalCost();
-    //--float costV = newRv.getTotalCost();
+    bool result = operateMoveDepotRouteFacade(newRu, newRv, move, equal, gpu, streamId);
 
-    //--Route oldRu = newRu;
-    //--Route oldRv = newRv;
+    if (result) {
+        newRu.calculateCost();
+        if (!equal) newRv.calculateCost();
 
-    //    if (result) {
-    newRu.calculateCost();
-    if (!equal) newRv.calculateCost();
-    //    }
-
-    //--float diffU = fabsf(Util::calculateGAP(Util::scaledFloat(costU), Util::scaledFloat(newRu.getTotalCost())));
-    //--float diffV = fabsf(Util::calculateGAP(Util::scaledFloat(costV), Util::scaledFloat(newRv.getTotalCost())));
-
-    //--
-    /*if ((diffU > 1.00 || diffV > 1.00)) {
-            std::cout << "MOVE: " << move << " -> Cost Old != New -> Equal: " << equal << 
-                    " - Diff U: " << diffU << " - Diff V: " << diffV << std::endl;
-    }*/
-    // --
-
-    if (Util::isBetterSolution(newRu.getTotalCost() + newRv.getTotalCost(), ru.getTotalCost() + rv.getTotalCost())) {
-        ru = newRu;
-        if (!equal) rv = newRv;
-        result = true;
-    } else
-        result = false;
+        if (Util::isBetterSolution(newRu.getTotalCost() + newRv.getTotalCost(),
+            ru.getTotalCost() + rv.getTotalCost())) {
+            ru = newRu;
+            if (!equal) rv = newRv;
+            result = true;
+        }
+        else
+            result = false;
+    }
 
     return result;
 }
 
-bool LocalSearch::operateMoves(MDVRPProblem* problem, AlgorithmConfig* config, Route& ru, Route& rv, bool equal) {
+bool LocalSearch::operateMoves(MDVRPProblem* problem, AlgorithmConfig* config, Route& ru, Route& rv, bool equal, bool gpu, int streamId) {
 
     bool result, improved = false;
     int move;
@@ -104,7 +59,7 @@ bool LocalSearch::operateMoves(MDVRPProblem* problem, AlgorithmConfig* config, R
             move = m;
 
         do {
-            result = LocalSearch::processMoveDepotRoute(ru, rv, move, equal);
+            result = LocalSearch::processMoveDepotRoute(ru, rv, move, equal, gpu, streamId);
 
             if (result)
                 improved = true;
@@ -121,7 +76,7 @@ bool LocalSearch::operateMoves(MDVRPProblem* problem, AlgorithmConfig* config, R
  * Private Methods
  */
 
-bool LocalSearch::operateMoveDepotRouteFacade(Route& ru, Route& rv, int move, bool equal) {
+bool LocalSearch::operateMoveDepotRouteFacade(Route& ru, Route& rv, int move, bool equal, bool gpu, int streamId) {
 
     bool result = false;
 
@@ -130,11 +85,20 @@ bool LocalSearch::operateMoveDepotRouteFacade(Route& ru, Route& rv, int move, bo
     switch (move) {
 
         case 1:
+            //if (equal || !gpu)
+            //    result = operateMoveDepotRouteM1(ru, rv, equal);
+            //else {
+            //    //Lock* gpuLock = ru.getProblem()->getMonitor().getGPULock();
+            //    //gpuLock->lock();
+            //    result = cudaLocalSearch(ru, rv, move);
+            //    //gpuLock->unlock();
+            //}
+
             result = operateMoveDepotRouteM1(ru, rv, equal);
             break;
 
         case 2:
-            result = operateMoveDepotRouteM2(ru, rv, equal);
+            result = operateMoveDepotRouteM2(ru, rv, equal, false);
             break;
 
         case 3:
@@ -142,6 +106,15 @@ bool LocalSearch::operateMoveDepotRouteFacade(Route& ru, Route& rv, int move, bo
             break;
 
         case 4:
+            //if (true || equal || !gpu)
+            //    result = operateMoveDepotRouteM4(ru, rv, equal);
+            //else {
+            //    //Lock* gpuLock = ru.getProblem()->getMonitor().getGPULock();
+            //    //gpuLock->lock();
+            //    result = cudaLocalSearch(ru, rv, move);
+            //    //gpuLock->unlock();
+            //}
+                
             result = operateMoveDepotRouteM4(ru, rv, equal);
             break;
 
@@ -154,15 +127,41 @@ bool LocalSearch::operateMoveDepotRouteFacade(Route& ru, Route& rv, int move, bo
             break;
 
         case 7:
-            result = operateMoveDepotRouteM7(ru, rv, equal);
+            if (!equal)
+                return false;
+
+            if (!gpu)
+                result = operateMoveDepotRouteM7(ru, rv, equal);
+            else
+                result = cudaLocalSearch(ru, rv, move, streamId);
+
             break;
 
         case 8:
+
+            if (equal)
+                return false;
+
             result = operateMoveDepotRouteM8(ru, rv, equal);
+
+            if (!gpu)
+                result = operateMoveDepotRouteM8(ru, rv, equal);
+            else
+                result = cudaLocalSearch(ru, rv, move, streamId);
+
             break;
 
         case 9:
+            if (equal)
+                return false;
+
             result = operateMoveDepotRouteM9(ru, rv, equal);
+
+            if (!gpu)
+                result = operateMoveDepotRouteM9(ru, rv, equal);
+            else
+                result = cudaLocalSearch(ru, rv, move, streamId);
+
             break;
 
     }
@@ -252,8 +251,15 @@ bool LocalSearch::operateMoveDepotRouteM1(Route& ru, Route& rv, bool equal) {
 
         for (auto iterRU = ru.getTour().begin(); iterRU != ru.getTour().end(); ++iterRU) {
 
-            if (rv.getProblem()->getDemand().at((*iterRU) - 1) + rv.getDemand() > rv.getProblem()->getCapacity())
-                continue;
+            if (CHECK_DEMAND) {
+                if (rv.getProblem()->getDemand().at((*iterRU) - 1) + rv.getDemand() > rv.getCapacity())
+                    continue;
+            }
+
+            //            // Check service duration time
+            //            if (rv.getProblem()->getDuration() > 0)
+            //                if (rv.getProblem()->getServiceTime().at((*iterRU) - 1) + rv.getServiceTime() > rv.getDuration())
+            //                    continue;
 
             Route newRU = ru;
             newRU.remove((*iterRU));
@@ -377,8 +383,7 @@ bool LocalSearch::operateMoveDepotRouteM2(Route& ru, Route& rv, bool equal, bool
                         firstPosition = newRU.addAtFront(customer1);
                         frontInserted = true;
                         increasePosition = false;
-                    }
-                    else {
+                    } else {
                         //cout << "After: " << *iterRV << endl;
                         firstPosition = newRU.addAfterPrevious(iterRV, customer1);
                         increasePosition = true;
@@ -392,8 +397,7 @@ bool LocalSearch::operateMoveDepotRouteM2(Route& ru, Route& rv, bool equal, bool
                         result = true;
                         //cout << "Improved \n";
                         break;
-                    }
-                    else {
+                    } else {
                         newRU.remove(firstPosition);
                         newRU.remove(secPosition);
                         //newRU.printSolution();
@@ -431,8 +435,19 @@ bool LocalSearch::operateMoveDepotRouteM2(Route& ru, Route& rv, bool equal, bool
             demand = rv.getProblem()->getDemand().at((*iterRU) - 1);
             demand += rv.getProblem()->getDemand().at((*next(iterRU)) - 1);
 
-            if (demand + rv.getDemand() > rv.getProblem()->getCapacity())
-                continue;
+            if (CHECK_DEMAND) {
+                if (demand + rv.getDemand() > rv.getCapacity())
+                    continue;
+            }
+            //            // Check service duration time
+            //            if (rv.getProblem()->getDuration() > 0) {
+            //
+            //                service = rv.getProblem()->getServiceTime().at((*iterRU) - 1);
+            //                service += rv.getProblem()->getServiceTime().at((*next(iterRU)) - 1);
+            //
+            //                if (service + rv.getServiceTime() > rv.getDuration())
+            //                    continue;
+            //            }
 
             //ru.printSolution();
 
@@ -476,8 +491,7 @@ bool LocalSearch::operateMoveDepotRouteM2(Route& ru, Route& rv, bool equal, bool
                         firstPosition = rv.addAtFront(customer1);
                         frontInserted = true;
                         increasePosition = false;
-                    }
-                    else {
+                    } else {
                         //cout << "After: " << *iterRV << endl;
                         firstPosition = rv.addAfterPrevious(iterRV, customer1);
                         increasePosition = true;
@@ -492,8 +506,7 @@ bool LocalSearch::operateMoveDepotRouteM2(Route& ru, Route& rv, bool equal, bool
                         result = true;
                         //cout << "Improved \n";
                         break;
-                    }
-                    else {
+                    } else {
                         rv.remove(firstPosition);
                         rv.remove(secPosition);
                         //rv.printSolution();
@@ -548,7 +561,8 @@ bool LocalSearch::operateMoveDepotRouteM4(Route& ru, Route& rv, bool equal) {
                     continue;
 
                 //ru.printSolution();
-                if (next(iterRV) == ru.getTour().end() || ru.getProblem()->getGranularNeighborhood().at((*iterRU) - 1).at((*next(iterRV)) - 1) == 1) {
+                if (next(iterRV) != ru.getTour().end()) {
+                    //  || ru.getProblem()->getGranularNeighborhood().at((*iterRU) - 1).at((*next(iterRV)) - 1) == 1
 
                     costBefore = ru.calculateCost(iterRU, next(iterRU), demand);
                     costBefore += ru.calculateCost(iterRV, next(iterRV), demand);
@@ -570,8 +584,7 @@ bool LocalSearch::operateMoveDepotRouteM4(Route& ru, Route& rv, bool equal) {
                         result = true;
                         //cout << "Improved \n";
                         break;
-                    }
-                    else {
+                    } else {
                         std::swap((*iterRU), (*iterRV));
                         //newRU.printSolution();
                         //cout << endl;
@@ -598,25 +611,41 @@ bool LocalSearch::operateMoveDepotRouteM4(Route& ru, Route& rv, bool equal) {
         for (auto iterRU = ru.getTour().begin(); iterRU != ru.getTour().end(); ++iterRU) {
             for (auto iterRV = rv.getTour().begin(); iterRV != rv.getTour().end(); ++iterRV) {
 
-                demand = rv.getDemand() - rv.getProblem()->getDemand().at((*iterRV) - 1) + rv.getProblem()->getDemand().at((*iterRU) - 1);
-                if (demand > rv.getProblem()->getCapacity())
-                    continue;
+                if (CHECK_DEMAND) {
+                    demand = rv.getDemand() - rv.getProblem()->getDemand().at((*iterRV) - 1) + rv.getProblem()->getDemand().at((*iterRU) - 1);
+                    if (demand > rv.getCapacity())
+                        continue;
+                }
 
-                demand = ru.getDemand() - ru.getProblem()->getDemand().at((*iterRU) - 1) + ru.getProblem()->getDemand().at((*iterRV) - 1);
-                if (demand > rv.getProblem()->getCapacity())
-                    continue;
+                if (CHECK_DEMAND) {
+                    demand = ru.getDemand() - ru.getProblem()->getDemand().at((*iterRU) - 1) + ru.getProblem()->getDemand().at((*iterRV) - 1);
+                    if (demand > ru.getCapacity())
+                        continue;
+                }
 
-                //ru.printSolution();
+                //                // Check service duration time
+                //                if (rv.getProblem()->getDuration() > 0) {
+                //
+                //                    service = rv.getServiceTime() - rv.getProblem()->getServiceTime().at((*iterRV) - 1) + rv.getProblem()->getServiceTime().at((*iterRU) - 1);
+                //                    if (service > rv.getDuration())
+                //                        continue;
+                //
+                //                    service = ru.getServiceTime() - ru.getProblem()->getServiceTime().at((*iterRU) - 1) + ru.getProblem()->getServiceTime().at((*iterRV) - 1);
+                //                    if (service > ru.getDuration())
+                //                        continue;
+                //
+                //                }
 
-                if (next(iterRV) == rv.getTour().end() || ru.getProblem()->getGranularNeighborhood().at((*iterRU) - 1).at((*next(iterRV)) - 1) == 1) {
+                if (next(iterRV) != rv.getTour().end()) {
+                    //  || ru.getProblem()->getGranularNeighborhood().at((*iterRU) - 1).at((*next(iterRV)) - 1) == 1
 
-                    costBefore = ru.calculateCost(iterRU, next(iterRU), demand);
-                    costBefore += rv.calculateCost(iterRV, next(iterRV), demand);
+                    //costBefore = ru.calculateCost(iterRU, next(iterRU), demand);
+                    //costBefore += rv.calculateCost(iterRV, next(iterRV), demand);
                     b = ru.getTotalCost() + rv.getTotalCost();
                     std::swap((*iterRU), (*iterRV));
 
-                    costAfter = ru.calculateCost(iterRU, next(iterRU), demand);
-                    costAfter += rv.calculateCost(iterRV, next(iterRV), demand);
+                    //costAfter = ru.calculateCost(iterRU, next(iterRU), demand);
+                    //costAfter += rv.calculateCost(iterRV, next(iterRV), demand);
 
                     ru.calculateCost();
                     rv.calculateCost();
@@ -631,8 +660,7 @@ bool LocalSearch::operateMoveDepotRouteM4(Route& ru, Route& rv, bool equal) {
                         result = true;
                         //cout << "Improved \n";
                         break;
-                    }
-                    else {
+                    } else {
                         std::swap((*iterRU), (*iterRV));
                         ru.calculateCost();
                         rv.calculateCost();
@@ -668,7 +696,7 @@ bool LocalSearch::operateMoveDepotRouteM5(Route& ru, Route& rv, bool equal) {
     bool frontInserted = false;
     bool isBeforeFrontRU = false, isBeforeFrontRV = false;
     float cost;
-    int demand, customerBeforeRU, customerBeforeRV, customerV;
+    int demandU, demandV, customerBeforeRU, customerBeforeRV, customerV, serviceU, serviceV;
 
     if (equal) {
 
@@ -818,8 +846,6 @@ bool LocalSearch::operateMoveDepotRouteM5(Route& ru, Route& rv, bool equal) {
             newRU.remove((*nextIterRU));
             //newRU.printSolution();
 
-            demand = ru.getProblem()->getDemand().at((*iterRU) - 1) + ru.getProblem()->getDemand().at((*nextIterRU) - 1);
-
             //cout << "Before = " << customerBeforeRU << " - Next = " << (*nextIterRU) << endl;
             //cout << "\n\nTest = " << (*iterRU) << endl;
 
@@ -833,16 +859,44 @@ bool LocalSearch::operateMoveDepotRouteM5(Route& ru, Route& rv, bool equal) {
 
             while (!endProcess) {
 
-                if (rv.getDemand() - rv.getProblem()->getDemand().at((*iterRV) - 1) + demand > rv.getProblem()->getCapacity()) {
-                    iterRV++;
+                demandU = ru.getDemand() - (ru.getProblem()->getDemand().at((*iterRU) - 1) + ru.getProblem()->getDemand().at((*nextIterRU) - 1))
+                        + rv.getProblem()->getDemand().at((*iterRV) - 1);
 
-                    if (iterRV == rv.getTour().end())
-                        endProcess = true;
+                demandV = rv.getDemand() - rv.getProblem()->getDemand().at((*iterRV) - 1)
+                        + (ru.getProblem()->getDemand().at((*iterRU) - 1) + ru.getProblem()->getDemand().at((*nextIterRU) - 1));
 
-                    if (ru.getProblem()->getMonitor().isTerminated())
-                        break;
+                serviceU = 0;
+                serviceV = 0;
 
-                    continue;
+                //                // Check service duration time
+                //                if (rv.getProblem()->getDuration() > 0) {
+                //                    // S_ru <- S_ru - (S_u + S_x) + S_v
+                //                    serviceU = ru.getServiceTime() -
+                //                                (ru.getProblem()->getServiceTime().at((*iterRU) - 1) + ru.getProblem()->getServiceTime().at((*nextIterRU) - 1)) +
+                //                                rv.getProblem()->getServiceTime().at((*iterRV) - 1);
+                //
+                //                    // S_rv <- S_ru - S_v + S_x + S_u
+                //                    serviceV = rv.getServiceTime() - rv.getProblem()->getServiceTime().at((*iterRV) - 1) +
+                //                            (ru.getProblem()->getServiceTime().at((*iterRU) - 1) + ru.getProblem()->getServiceTime().at((*nextIterRU) - 1));
+                //                }
+
+                if (CHECK_DEMAND) {
+
+                    if ((demandU > ru.getCapacity())
+                            || (demandV > rv.getCapacity())
+                            || serviceU > ru.getDuration()
+                            || serviceV > rv.getDuration()) {
+                        // Go to next
+                        iterRV++;
+
+                        if (iterRV == rv.getTour().end())
+                            endProcess = true;
+
+                        if (ru.getProblem()->getMonitor().isTerminated())
+                            break;
+
+                        continue;
+                    }
                 }
 
                 auto firstPosition = iterRV;
@@ -922,26 +976,36 @@ bool LocalSearch::operateMoveDepotRouteM6(Route& ru, Route& rv, bool equal) {
 
     bool result = false;
     float costU, costV;
-    int demandU, demandV, customerU, customerUPP, customerV, customerVPP;
+    int demandU, demandV, serviceU, serviceV, customerU, customerUPP, customerV, customerVPP;
+
+    int i, j;
 
     if (equal) {
 
         if (ru.getTour().size() < 4)
             return result;
 
+        i = -1;
+
         for (auto iterRU = ru.getTour().begin(); iterRU != ru.getTour().end(); ++iterRU) {
+
+            i++;
 
             if (next(iterRU) == ru.getTour().end())
                 continue;
 
             auto nextIterRU = next(iterRU);
 
-            //U, U+1            
+            //U, U+1
             customerU = (*iterRU);
             customerUPP = (*nextIterRU);
 
+            j = i;
+
             //for (auto iterRV = ru.getTour().begin(); iterRV != ru.getTour().end(); ++iterRV) {
             for (auto iterRV = next(nextIterRU); iterRV != ru.getTour().end(); ++iterRV) {
+
+                j++;
 
                 if (next(iterRV) == ru.getTour().end())
                     continue;
@@ -953,10 +1017,10 @@ bool LocalSearch::operateMoveDepotRouteM6(Route& ru, Route& rv, bool equal) {
                 customerVPP = (*nextIterRV);
 
                 // Avoid repeated customers
-                if (iterRV == iterRU || iterRV == nextIterRU)
+                if (customerV == customerU || customerV == customerUPP)
                     continue;
 
-                if (nextIterRV == iterRU || nextIterRV == nextIterRU)
+                if (customerVPP == customerU || customerVPP == customerUPP)
                     continue;
 
                 costU = ru.getTotalCost();
@@ -964,6 +1028,9 @@ bool LocalSearch::operateMoveDepotRouteM6(Route& ru, Route& rv, bool equal) {
                 // Change V with U
                 ru.changeCustomer(iterRV, customerU);
                 ru.changeCustomer(nextIterRV, customerUPP);
+
+                //cout << "Equal: " << equal << " -> i: " << i << " - j: " << j << " \tU: " << customerU << " - X: " << customerUPP
+                //    << " \tV: " << customerV << " - Y: " << customerVPP << endl;
 
                 //ru.printSolution();
 
@@ -1007,21 +1074,29 @@ bool LocalSearch::operateMoveDepotRouteM6(Route& ru, Route& rv, bool equal) {
         if (ru.getTour().size() < 2 || rv.getTour().size() < 2)
             return result;
 
-        for (auto iterRU = ru.getTour().begin(); iterRU != ru.getTour().end(); ++iterRU) {
+        i = -1;
 
+        for (auto iterRU = ru.getTour().begin(); iterRU != ru.getTour().end(); ++iterRU) {
+            i++;
             if (next(iterRU) == ru.getTour().end())
                 continue;
 
             auto nextIterRU = next(iterRU);
 
-            //U, U+1            
+            //U, U+1
             customerU = (*iterRU);
             customerUPP = (*nextIterRU);
 
             demandU = ru.getProblem()->getDemand().at(customerU - 1);
             demandU += ru.getProblem()->getDemand().at(customerUPP - 1);
 
+            serviceU = ru.getProblem()->getServiceTime().at(customerU - 1);
+            serviceU += ru.getProblem()->getServiceTime().at(customerUPP - 1);
+
+            j = -1;
             for (auto iterRV = rv.getTour().begin(); iterRV != rv.getTour().end(); ++iterRV) {
+
+                j++;
 
                 if (next(iterRV) == rv.getTour().end())
                     continue;
@@ -1035,13 +1110,23 @@ bool LocalSearch::operateMoveDepotRouteM6(Route& ru, Route& rv, bool equal) {
                 demandV = rv.getProblem()->getDemand().at(customerV - 1);
                 demandV += rv.getProblem()->getDemand().at(customerVPP - 1);
 
-                // If the capacity is exceeded swapping U and V
-                if (ru.getDemand() - demandU + demandV > ru.getProblem()->getCapacity())
-                    continue;
+                serviceV = rv.getProblem()->getServiceTime().at(customerV - 1);
+                serviceV += rv.getProblem()->getServiceTime().at(customerVPP - 1);
 
-                // If the capacity is exceeded swapping V and U
-                if (rv.getDemand() - demandV + demandU > rv.getProblem()->getCapacity())
-                    continue;
+                if (CHECK_DEMAND) {
+
+                    // If the capacity is exceeded swapping U and V
+                    if (ru.getDemand() - demandU + demandV > ru.getCapacity())
+                        continue;
+                }
+
+                if (CHECK_DEMAND) {
+
+                    // If the capacity is exceeded swapping V and U
+                    if (rv.getDemand() - demandV + demandU > rv.getCapacity())
+                        continue;
+
+                }
 
                 // Avoid repeated customers
                 if (customerV == customerU || customerV == customerUPP)
@@ -1064,6 +1149,9 @@ bool LocalSearch::operateMoveDepotRouteM6(Route& ru, Route& rv, bool equal) {
                 ru.changeCustomer(nextIterRU, customerVPP);
 
                 //ru.printSolution();
+
+                //cout << "Equal: " << equal << " -> i: " << i << " - j: " << j << " \tU: " << customerU << " - X: " << customerUPP
+                //    << " \tV: " << customerV << " - Y: " << customerVPP << endl;
 
                 if (Util::isBetterSolution(ru.getTotalCost() + rv.getTotalCost(), costU + costV)) {
                     result = true;
@@ -1266,7 +1354,8 @@ bool LocalSearch::operateMoveDepotRouteM8(Route& ru, Route& rv, bool equal) {
             //newRU.printSolution();
             //newRV.printSolution();
 
-            if (Util::isBetterSolution(newRU.getTotalCost() + newRV.getTotalCost(), ru.getTotalCost() + rv.getTotalCost())) {
+            if (Util::isBetterSolution(newRU.getTotalCost() + newRV.getTotalCost(),
+                    ru.getTotalCost() + rv.getTotalCost())) {
                 ru = newRU;
                 rv = newRV;
                 result = true;
@@ -1403,7 +1492,8 @@ bool LocalSearch::operateMoveDepotRouteM9(Route& ru, Route& rv, bool equal) {
             //newRU.printSolution();
             //newRV.printSolution();
 
-            if (Util::isBetterSolution(newRU.getTotalCost() + newRV.getTotalCost(), ru.getTotalCost() + rv.getTotalCost())) {
+            if (Util::isBetterSolution(newRU.getTotalCost() + newRV.getTotalCost(),
+                    ru.getTotalCost() + rv.getTotalCost())) {
                 ru = newRU;
                 rv = newRV;
                 result = true;

@@ -55,6 +55,8 @@ class Monitor {
     //Lock **locks;
     Lock locks[NUM_MAX_DEP][NUM_MAX_CLI];
     Lock subpopLocks[NUM_MAX_DEP];
+
+    Lock gpuLock;
     
     //std::vector<mutex_wrapper> locksWrapper;
     //typedef_vectorMatrix<mutex_wrapper> locksWrapper;
@@ -128,7 +130,8 @@ public:
 
     Lock* getLock(int subpopId, int indId);
     Lock* getSubpopLock(int subpopId);
-    
+    Lock* getGPULock();
+
     //Lock& getLock(int subpopId, int indId);
     
     /*

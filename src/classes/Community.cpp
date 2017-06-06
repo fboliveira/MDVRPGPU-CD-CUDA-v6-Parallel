@@ -137,9 +137,9 @@ void Community::evaluateSubpops(bool firstEvaluation) {
 
 }
 
-void Community::printEvolution() {
+void Community::printEvolution(bool initialValue) {
 
-    if (this->getConfig()->getProcessType() == Enum_Process_Type::MONO_THREAD) {
+    if (initialValue || this->getConfig()->getProcessType() == Enum_Process_Type::MONO_THREAD) {
 
         float gap = Util::calculateGAP(this->getEliteGroup()->getBest().getTotalCost(),
             this->getProblem()->getBestKnowSolution());
@@ -264,29 +264,11 @@ void Community::evolve() {
                     continue;
                 }
 
-                //this->getProblem()->getMonitor().addToLog("Start: isCopyFromSubpopsRequested...");
-
-                // Get paring values from pool
-                /*
-                for (auto id = 0; id < this->getSubpopsPool().size(); ++id) {
-                //printf("Updating subpop id = %d\n", id);
-                this->getSubpops().at(id).setPairing(this->getSubpopsPool().at(id).getPairing());
-                }
-                */
-
-                //--this->getProblem()->getMonitor().getMutexLocker().lock();
-
                 this->getSubpopsPool().clear();
 
-                //printf("Copiando pool\n");
-                //this->setSubpopsPool(this->getSubpopsConst());
-                //printf("Copiado pool\n");
                 this->getProblem()->getMonitor().setCopyFromSubpopsAllowed(true);
                 this->getProblem()->getMonitor().setCopyFromSubpopsRequested(false);
 
-                //--this->getProblem()->getMonitor().getMutexLocker().unlock();
-
-                //this->getProblem()->getMonitor().addToLog("End: isCopyFromSubpopsRequested.");
             }
 
             if (this->getProblem()->getMonitor().isTerminated())
@@ -295,29 +277,46 @@ void Community::evolve() {
             this->getProblem()->getMonitor().setEvolvingSubpops(true);
             //this->getProblem()->getMonitor().addToLog("Start: Evolving Subpops...");
 
-            std::vector<std::thread> threads;
+            if (true) {
+                std::vector<std::thread> threads;
 
-            for_each(this->getSubpops().begin(), this->getSubpops().end(), [&](Subpopulation & subpop) {
+                for_each(this->getSubpops().begin(), this->getSubpops().end(), [&](Subpopulation & subpop) {
 
-                threads.push_back(std::thread([&subpop]() {
-                    try {
-                        Lock *subpoplock = subpop.getProblem()->getMonitor().getSubpopLock(subpop.getDepot());
-                        //printf("evolve: Waiting subpop: %d\n", subpop.getDepot());
-                        subpoplock->wait(false);
-                        //printf("evolve: Evolving subpop: %d\n", subpop.getDepot());
-                        subpop.evolve();
-                        //printf("evolve: Notifying subpop: %d\n", subpop.getDepot());
-                        subpoplock->notify(true);
-                    }
-                    catch (exception& e) {
-                        cout << e.what() << endl;
-                    }
-                }));
+                    threads.push_back(std::thread([&subpop]() {
+                        try {
+                            Lock *subpoplock = subpop.getProblem()->getMonitor().getSubpopLock(subpop.getDepot());
+                            //printf("evolve: Waiting subpop: %d\n", subpop.getDepot());
+                            subpoplock->wait(false);
+                            //printf("evolve: Evolving subpop: %d\n", subpop.getDepot());
+                            subpop.evolve();
+                            //printf("evolve: Notifying subpop: %d\n", subpop.getDepot());
+                            subpoplock->notify(true);
+                        }
+                        catch (exception& e) {
+                            cout << e.what() << endl;
+                        }
+                    }));
 
-            });
+                });
 
-            for (auto& th : threads)
-                th.join();
+                for (auto& th : threads)
+                    th.join();
+            }
+            else {
+
+                for_each(this->getSubpops().begin(), this->getSubpops().end(), [&](Subpopulation & subpop) {
+
+                    Lock *subpoplock = subpop.getProblem()->getMonitor().getSubpopLock(subpop.getDepot());
+                    //printf("evolve: Waiting subpop: %d\n", subpop.getDepot());
+                    subpoplock->wait(false);
+                    //printf("evolve: Evolving subpop: %d\n", subpop.getDepot());
+                    subpop.evolve();
+                    //printf("evolve: Notifying subpop: %d\n", subpop.getDepot());
+                    subpoplock->notify(true);
+
+                });
+
+            }
 
             this->getProblem()->getMonitor().setEvolvingSubpops(false);
             //this->getProblem()->getMonitor().addToLog("End: Evolving Subpops.");
@@ -500,6 +499,8 @@ void Community::checkEvolution() {
     else {
 
         float cost = this->getEliteGroup()->getBest().getTotalCost();
+        float gap;
+
         time_t readTime;
         time(&readTime);
 
@@ -527,14 +528,17 @@ void Community::checkEvolution() {
 
                     lastPosition = this->getEvolution().insert_after(lastPosition, evolution);
 
-                    //cout << evolution.time << "\t" << evolution.cost << endl;
-
-                    //cout << Util::diffTimeFromStart(this->getProblem()->getMonitor().getStart()) << ": " 
-                    //    << cost << " => " << newCost << endl;
+                    gap = Util::calculateGAP(cost, this->getProblem()->getBestKnowSolution());
 
                     printf("%.2f; %.2f; %.2f; %.2f\n", evolution.time, evolution.cost,
-                        this->getProblem()->getBestKnowSolution(),
-                        Util::calculateGAP(cost, this->getProblem()->getBestKnowSolution()));
+                        this->getProblem()->getBestKnowSolution(), gap);
+
+                    //if (gap < 0) {
+                    //    cout << endl << endl;
+                    //    this->getEliteGroup()->getBest().evaluate(true, true);
+                    //    this->getEliteGroup()->getBest().printSolution();
+                    //    cout << endl << endl;
+                    //}
 
                 }
 

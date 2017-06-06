@@ -1,7 +1,7 @@
-/* 
+/*
  * File:   Individual.cpp
  * Author: fernando
- * 
+ *
  * Created on July 21, 2014, 2:05 PM
  */
 
@@ -31,41 +31,6 @@ problem(problem), config(config), depot(depot), id(id) { //, mutexLocker(mutexLo
 }
 
 // Copy constructor
-
-//Individual::Individual(const Individual& other) :
-//problem(other.problem), config(other.config), depot(other.depot), id(other.id), changed(other.changed),
-//gene(other.gene), routes(other.routes), locked(other.locked),
-//mutationRatePM(other.mutationRatePM), mutationRatePLS(other.mutationRatePLS),
-//relaxSplit(other.relaxSplit), restartMoves(other.restartMoves) {
-//}
-
-//Individual::Individual(const Individual& other) {
-//
-//    //this->setMutexLocker(other.getMutexLocker());
-//    //this->setConditionVariable(other.getConditionVariable());
-//
-//    this->setProblem(other.getProblem());
-//    this->setConfig(other.getConfig());
-//
-//    this->setDepot(other.getDepot());
-//    this->setId(other.getId());
-//
-//    this->setChanged(other.isChanged());
-//
-//    this->setGene(other.getGeneConst());
-//    this->setRoutes(other.getRoutesConst());
-//
-//    this->setLocked(other.isLocked());
-//
-//    this->setNumOperations(other.getNumOperations());
-//    this->setMutationRatePM(other.getMutationRatePM());
-//    this->setMutationRatePLS(other.getMutationRatePLS());
-//
-//    this->setRelaxSplit(other.isRelaxSplit());
-//    this->setRestartMoves(other.isRestartMoves());
-//
-//}
-
 Individual::Individual(const Individual& other) :
 problem(other.problem), config(other.config), depot(other.depot),
 id(other.id), changed(other.changed), gene(other.gene),
@@ -236,7 +201,7 @@ void Individual::setCustomersPosition(vector<CustomerPosition>& position) {
 
     this->updateRoutesID();
 
-    for_each(this->getRoutes().begin(), this->getRoutes().end(), [&position] (Route & route) {
+    for_each(this->getRoutes().begin(), this->getRoutes().end(), [&position](Route & route) {
         route.setCustomersPosition(position);
     });
 
@@ -303,12 +268,14 @@ void Individual::evaluate(bool split) {
     if (this->isPenalized()) {
         this->setRelaxSplit(true);
         split = true;
-    } else
+    }
+    else
         this->setRelaxSplit(false);
 
     if (split || this->isChanged()) {
         this->split();
-    } else {
+    }
+    else {
 
         //        for_each(this->getRoutes().begin(), this->getRoutes().end(), [] (Route & route) {
         //            
@@ -343,7 +310,7 @@ Individual Individual::evolve() {
 
     this->setLocked(true);
 
-    Individual offspring = this->copy();
+    Individual offspring = this->copy(true);
 
     if (this->getGene().size() == 0) {
         printf("Subpop = %d => Ind vazio!\n", this->getDepot());
@@ -358,11 +325,12 @@ Individual Individual::evolve() {
     //printf("Offspring = D: %d - Id: %d => PM: %.2f / PLS: %.2f / RS: %d\n", this->getDepot(), 
     //        this->getId(), this->getMutationRatePM(), this->getMutationRatePLS(), this->isRestartMoves());
 
-    if (Random::randFloat() <= this->getMutationRatePM()) {
+    if (Random::randFloat() <= offspring.getMutationRatePM()) {
         offspring.mutate();
         offspring.evaluate(true);
         mutate = true;
-    } else {
+    }
+    else {
 
         if (offspring.getRoutes().size() == 0)
             offspring.evaluate(true);
@@ -371,7 +339,7 @@ Individual Individual::evolve() {
 
     //offspring.printSolution();
 
-    if (Random::randFloat() <= this->getMutationRatePLS()) {
+    if (Random::randFloat() <= offspring.getMutationRatePLS()) {
 
         //Individual orig = offspring;
         //offspring.printSolution(true);
@@ -401,19 +369,18 @@ Individual Individual::evolve() {
 
     }
 
-    if (this->getRoutes().size() == 0) {
+    if (offspring.getRoutes().size() == 0) {
         //cout << "Wait\n\n";
         //cout << "Old: " << this->getTotalCost() << endl;
-        this->evaluate(true);
+        offspring.evaluate(true);
         //cout << "New: " << this->getTotalCost() << endl;
     }
 
+    // Update parent parameter, if there is no improvement.
     if (Util::isBetterSolution(offspring.getTotalCost(), this->getTotalCost())) {
-        //this->setGene(offspring.getGene());
-        //this->setRoutes(offspring.getRoutesConst());
-        //this->evaluate(true);
         this->updateParameters(true);
-    } else {
+    }
+    else {
         this->updateParameters(false);
     }
 
@@ -448,14 +415,15 @@ void Individual::mutate() {
 
     int x, y;
 
-    this->autoUpdate();
+    this->autoUpdate(true);
 
     try {
         for (int i = 0; i < this->getNumOperations(); ++i) {
             Random::randTwoNumbers(0, this->getGene().size() - 1, x, y);
             swap(this->getGene().at(x), this->getGene().at(y));
         }
-    } catch (exception &e) {
+    }
+    catch (exception &e) {
         cout << "Individual::mutate() => " << e.what() << '\n';
         cout << "X = " << x << "\tY = " << y << "\tSize = " << this->getGene().size() << endl;
     }
@@ -467,7 +435,7 @@ void Individual::localSearch() {
 
     int move, ru, rv;
 
-    try {
+    //try {
 
         for (int u = 0; u < this->getRoutes().size(); ++u) {
 
@@ -511,7 +479,9 @@ void Individual::localSearch() {
 
                     bool result = false;
                     do {
-                        result = LocalSearch::processMoveDepotRoute(this->getRoutes().at(ru), this->getRoutes().at(rv), move, ru == rv);
+                        result = LocalSearch::processMoveDepotRoute(this->getRoutes().at(ru), this->getRoutes().at(rv),
+                            move, ru == rv, false, -1);
+
                     } while (result && this->isRestartMoves() && !this->getProblem()->getMonitor().isTerminated());
 
                     if (this->getProblem()->getMonitor().isTerminated())
@@ -527,9 +497,10 @@ void Individual::localSearch() {
                 break;
 
         }
-    } catch (exception &e) {
-        cout << e.what() << '\n';
-    }
+    //}
+    //catch (exception &e) {
+    //    cout << "Individual::localSearch(): " << e.what() << '\n';
+    //}
 
     this->setChanged(false);
 
@@ -539,7 +510,7 @@ float Individual::getTotalCost() {
 
     float cost = 0.0;
 
-    for_each(this->getRoutes().begin(), this->getRoutes().end(), [&cost] (Route & route) {
+    for_each(this->getRoutes().begin(), this->getRoutes().end(), [&cost](Route & route) {
         cost += route.getTotalCost();
     });
 
@@ -577,9 +548,8 @@ int Individual::getNumVehicles() {
             validRoutes++;
 
     return validRoutes;
-    
-}
 
+}
 
 bool Individual::isPenalized() {
 
@@ -611,17 +581,21 @@ void Individual::split() {
 
     int i, j, c, load, nv;
     float cost, routeDuration;
+    int capacity;
 
     //this->print();
+
+    // Infinite
+    routeDuration = FLT_MAX;
 
     if (this->getProblem()->getDuration() > 0) {
         if (this->isRelaxSplit())
             routeDuration = 2 * this->getProblem()->getDuration();
         else
             routeDuration = this->getProblem()->getDuration();
-    } else
-        // Infinite
-        routeDuration = FLT_MAX;
+    }
+
+    capacity = this->getProblem()->getCapacity();
 
     if (this->getGene().size() == 0)
         return;
@@ -654,8 +628,11 @@ void Individual::split() {
 
             load += this->getProblem()->getDemand().at(c);
 
-            if (i == j)
+            if (i == j) {
                 cost = this->getProblem()->getDepotDistances().at(this->getDepot()).at(c) * 2;
+                // Compute service time
+                cost += this->getProblem()->getServiceTime().at(c);
+            }
             else {
 
                 if (this->getGene().at(j - 1) <= 0 || this->getGene().at(j - 1) > this->getProblem()->getCustomers()) {
@@ -670,11 +647,16 @@ void Individual::split() {
                 // + custo do anterior ate o corrente
                 // + custo do corrente ate o deposito                
                 cost = cost - this->getProblem()->getDepotDistances().at(this->getDepot()).at(this->getGene().at(j - 1) - 1)
-                        + this->getProblem()->getCustomerDistances().at(this->getGene().at(j - 1) - 1).at(c)
-                        + this->getProblem()->getDepotDistances().at(this->getDepot()).at(c);
+                    + this->getProblem()->getCustomerDistances().at(this->getGene().at(j - 1) - 1).at(c)
+                    + this->getProblem()->getDepotDistances().at(this->getDepot()).at(c);
+
+                // Compute service time
+                cost += this->getProblem()->getServiceTime().at(c);
+                //cost -= this->getProblem()->getServiceTime().at(this->getGene().at(j - 1) - 1);
+
             }
 
-            if (load <= this->getProblem()->getCapacity() && cost <= routeDuration) {
+            if (load <= capacity && cost <= routeDuration) {
                 if (V.at(i) + cost < V.at(j + 1)) {
                     V.at(j + 1) = V.at(i) + cost;
                     P.at(j + 1) = i;
@@ -683,7 +665,7 @@ void Individual::split() {
             }
 
             // Until            
-        } while ((j < length) && (load <= this->getProblem()->getCapacity()) && (cost <= routeDuration));
+        } while ((j < length) && (load <= capacity) && (cost <= routeDuration));
     }
 
     this->splitExtract(P);
@@ -706,11 +688,11 @@ void Individual::routesToGenes() {
     //            });
     //    }
 
-    for_each(this->getRoutes().begin(), this->getRoutes().end(), [&genes] (Route & route) {
+    for_each(this->getRoutes().begin(), this->getRoutes().end(), [&genes](Route & route) {
 
         //std::copy(route.getTour().begin(), route.getTour().end(), genes.end());
 
-        for_each(route.getTour().begin(), route.getTour().end(), [&genes] (int customer) {
+        for_each(route.getTour().begin(), route.getTour().end(), [&genes](int customer) {
             genes.push_back(customer);
         });
 
@@ -737,28 +719,18 @@ void Individual::routesToGenes() {
 
 }
 
-void Individual::autoUpdate() {
 
-//    int a, b;
-//    a = (int) this->getGene().size();
-//    b = a;
-//    a = -a;
-//
-//    int c = Random::randIntBetween(a, b);
-//
-//    int op = this->getNumOperations() + c;
-//
-//    if (op > b)
-//        op = b;
-//    else if (op < 1)
-//        op = 1;
-//
-//    this->setNumOperations(op);
+
+int Individual::autoUpdate(bool update) {
 
     int max = (int) this->getGene().size();
     int op = Random::discreteDistribution(1, max);
-    this->setNumOperations(op);
-    
+
+    if (update)
+        this->setNumOperations(op);
+
+    return op;
+
 }
 
 void Individual::updateParameters(bool improved) {
@@ -798,7 +770,7 @@ void Individual::removeRepeteadCustomer(int customer) {
 typedef_location Individual::getMinimalPositionToInsert(int customer) {
 
     typedef_location bestLocation;
-    
+
     //template<typename Iter>
     //Iter Individual::getMinimalPositionToInsert(Iter position, int customer) {
 
@@ -823,14 +795,15 @@ typedef_location Individual::getMinimalPositionToInsert(int customer) {
     // Cij = Dep -> C0
     try {
         costCij = this->getProblem()->getDepotDistances().at(this->getDepot()).at(this->getGene().at(0) - 1);
-    } catch (exception &e) {
+    }
+    catch (exception &e) {
         cout << "Individual::getMinimalPositionToInsert => " << e.what() << '\n';
         cout << this->getDepot() << endl;
         this->printSolution(true);
     }
     // Cik + Ckj = Dep -> Ck -> C0
     costCikj = this->getProblem()->getDepotDistances().at(this->getDepot()).at(customer) +
-            this->getProblem()->getCustomerDistances().at(customer).at(this->getGene().at(0) - 1);
+        this->getProblem()->getCustomerDistances().at(customer).at(this->getGene().at(0) - 1);
 
     // Best saving until now
     localSaving = costCikj - costCij;
@@ -845,7 +818,7 @@ typedef_location Individual::getMinimalPositionToInsert(int customer) {
         costCij = this->getProblem()->getCustomerDistances().at((*i) - 1).at((*next(i)) - 1);
         // Cik + Ckj = Ci -> Ck -> Ci + 1;
         costCikj = this->getProblem()->getCustomerDistances().at((*i) - 1).at(customer) +
-                this->getProblem()->getCustomerDistances().at(customer).at((*next(i)) - 1);
+            this->getProblem()->getCustomerDistances().at(customer).at((*next(i)) - 1);
 
         localSaving = costCikj - costCij;
 
@@ -862,7 +835,7 @@ typedef_location Individual::getMinimalPositionToInsert(int customer) {
     costCij = this->getProblem()->getDepotDistances().at(this->getDepot()).at(this->getGene().at(last) - 1);
     // Cik + Ckj = Cn -> Ck -> Dep
     costCikj = this->getProblem()->getCustomerDistances().at(this->getGene().at(last) - 1).at(customer) +
-            this->getProblem()->getDepotDistances().at(this->getDepot()).at(customer);
+        this->getProblem()->getDepotDistances().at(this->getDepot()).at(customer);
 
     localSaving = costCikj - costCij;
 
@@ -956,7 +929,7 @@ typedef_location Individual::getMinimalPositionToInsert(int customer) {
 //
 //}
 
-Individual Individual::copy() {
+Individual Individual::copy(bool data) {
 
     Individual individual = Individual(this->getProblem(), this->getConfig(), this->getDepot(), this->getId());
 
@@ -967,8 +940,10 @@ Individual Individual::copy() {
     individual.setDepot(this->getDepot());
     individual.setChanged(this->isChanged());
 
-    individual.setGene(this->getGene());
-    individual.setRoutes(this->getRoutesConst());
+    if (data) {
+        individual.setGene(this->getGene());
+        individual.setRoutes(this->getRoutesConst());
+    }
 
     individual.setLocked(this->isLocked());
 
@@ -1000,7 +975,7 @@ void Individual::print() {
 
     cout << "Dep = " << this->getDepot() << " - ID = " << this->getId() << " => Cost: " << this->getTotalCost() << endl;
 
-    for_each(this->getRoutes().begin(), this->getRoutes().end(), [] (Route & route) {
+    for_each(this->getRoutes().begin(), this->getRoutes().end(), [](Route & route) {
 
         route.print();
     });
@@ -1027,8 +1002,12 @@ void Individual::printSolution(bool insertTotalCost) {
     if (insertTotalCost)
         cout << "Dep = " << this->getDepot() << " - ID = " << this->getId() << " => Cost: " << this->getTotalCost() << endl;
 
-    for_each(this->getRoutes().begin(), this->getRoutes().end(), [] (Route & route) {
+    int i = 0;
+
+    for_each(this->getRoutes().begin(), this->getRoutes().end(), [&i](Route & route) {
+        route.setId(i);
         route.printSolution();
+        i++;
     });
 
 }
@@ -1037,7 +1016,7 @@ void Individual::printVehicles() {
 
     cout << "Dep = " << this->getDepot() << " - ID = " << this->getId() << " => Cost: " << this->getTotalCost() << "\t";
     cout << "Veh: " << this->getNumVehicles() << " / " << this->getProblem()->getVehicles() << endl;
-    
+
 }
 
 
@@ -1047,12 +1026,12 @@ void Individual::printVehicles() {
 
 /*
  *  Description: Generate initial solutions
- * 
+ *
  *  This process is basead on Nearest Insertion, except that node i is
  *  selected randomly and it is allocate on current depot.
- * 
+ *
  *  AVALIATION (COST) => DISTANCE
- * 
+ *
  */
 void Individual::generateInitialSolutionRandomNearestInsertion() {
 
@@ -1095,7 +1074,7 @@ void Individual::generateInitialSolutionRandomNearestInsertion() {
         // List of the closest ones (from allocated)
         closest.clear();
         this->getProblem()->getNearestCustomerFromCustomerOnDepot(i, this->getDepot(), closest);
-        nClosest = (int) closest.size();
+        nClosest = (int)closest.size();
 
         //imprimirVetor(closest, nClosest, 0);
 
@@ -1170,6 +1149,7 @@ void Individual::splitExtractWithoutVehicleLimit(vector<int>& P) {
         i = P.at(j);
 
         Route route = Route(this->getProblem(), this->getConfig(), this->getDepot(), id);
+        route.setRelaxDuration(false);
         id++;
 
         for (k = i; k < j; ++k) {
@@ -1218,7 +1198,8 @@ void Individual::splitExtractVehicleLimited(vector<int>& P) {
             route.calculateCost();
             this->getRoutes().push_back(route);
 
-        } else {
+        }
+        else {
             // Put in the last route
             for (k = i; k < j; ++k)
                 this->getRoutes().at(this->getProblem()->getVehicles() - 1).addAtBack(this->getGene().at(k));

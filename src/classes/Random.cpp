@@ -102,6 +102,18 @@ int Random::discreteDistribution(int min, int max) {
     return binomialDistribution(max, 0.5) + min;
 }
 
+long int Random::generateSeed() {
+
+    // http://cboard.cprogramming.com/cplusplus-programming/63995-cast-time_t-int.html
+    time_t the_time; // declare a time_t variable
+    long int x; // declare a long int
+    the_time = time(0); // initialize the time_t variable with the system time
+    x = static_cast<int>(the_time); // case the time_t variable to a long int
+
+    return x;
+
+}
+
 /*
  * Private Methods
  */

@@ -8,6 +8,12 @@
 #include "ESCoevolMDVRP.hpp"
 #include "PathRelinking.hpp"
 
+#include "../cuda/cuda_local_search.h"
+//#include "../cuda/thrust/cuda_thrust_test.h"
+
+#include "cuda_profiler_api.h"
+
+
 /*
  * Constructors and Destructor
  */
@@ -49,8 +55,8 @@ void ESCoevolMDVRP::run() {
     time_t start;
     time(&start);
 
-    ESCoevolMDVRP::testFunction2(this->getProblem(), this->getConfig());
-    return;
+    //ESCoevolMDVRP::testFunction2(this->getProblem(), this->getConfig());
+    //return;
     
     this->getProblem()->getMonitor().setStart(start);
 
@@ -77,16 +83,16 @@ void ESCoevolMDVRP::run() {
     //return;
     
     // Print evolution
-    community->printEvolution();
+    community->printEvolution(true);
     this->getProblem()->getMonitor().updateGeneration();
     //eliteGroup->getBest().printSolution();
 
     // ##### Start manager ###### ----------------
-    try {
+    //try {
         community->manager();
-    }    catch (exception& e) {
-        cout << e.what();
-    }
+    //}    catch (exception& e) {
+    //    cout << e.what();
+    //}
     // ########################## ----------------
 
     // Print result    
@@ -124,7 +130,7 @@ void ESCoevolMDVRP::testFunction1(MDVRPProblem* problem, AlgorithmConfig* config
         d_factor[i] = new int[problem->getCustomers()];
     
     // granularity threshold value θ = βz (where β is a sparsification factor and z is the average cost of the edges)
-    float beta = 1.2;
+    float beta = 1.2f;
     
     // distance factorφij =2cij +δj(∀i ∈ I, j ∈ J)isnotgreaterthanthemaximumduration D.
     
@@ -160,36 +166,75 @@ void ESCoevolMDVRP::testFunction1(MDVRPProblem* problem, AlgorithmConfig* config
 }
 
 void ESCoevolMDVRP::testFunction2(MDVRPProblem* problem, AlgorithmConfig* config) {
+     
+    int s[] = { 35, 9, 42, 46, 43, 39, 44 };
+    int N = 7;
+    Route u = Route(problem, config, 0, 0);
+
+    for (int i = 0; i < N; ++i)
+        u.addAtBack(s[i]);
+
+    int t[] = { 32, 31, 36, 41, 7, 37 };
+    int M = 6;
+
+    Route v = Route(problem, config, 1, 0);
+
+    for (int i = 0; i < M; ++i)
+        v.addAtBack(t[i]);
+
+    u.printSolution();
+    v.printSolution();
+    cout << "Cost U+V: " << u.getCost() + v.getCost() << endl;
+
+    cudaOperateMoveDepotRouteM9(u, v, 0);
+
+    cout << "NEW Cost U+V: " << u.getCost() + v.getCost() << endl;
+
+    getchar();
     
-//    int** sol = new int*[problem->getCustomers()];
-//    
-//    for(int i = 0; i < problem->getCustomers(); ++i)
-//        sol[i] = new int[problem->getCustomers()];
-//        
-//    for (int i = 0; i < problem->getCustomers(); ++i)
-//        delete [] sol[i];
-//    delete [] sol;
-  
-    int s[] = {72,155,44,38,27,110,230,41,78,90,243,203};
-    int N = 12;
-    Route r = Route(problem, config, 4, 0);
-    
-    for(int i = 0; i < N; ++i)
-        r.addAtBack(s[i]);
-    
-    r.printSolution();
-    
-    
+}
+
+void ESCoevolMDVRP::testProfile(MDVRPProblem* problem, AlgorithmConfig* config) {
+
+    int s[] = { 35, 9, 42, 46, 43, 39, 44 };
+    int N = 7;
+    Route u = Route(problem, config, 0, 0);
+
+    for (int i = 0; i < N; ++i)
+        u.addAtBack(s[i]);
+
+    int t[] = { 32, 31, 36, 41, 7, 37 };
+    int M = 6;
+
+    Route v = Route(problem, config, 1, 0);
+
+    for (int i = 0; i < M; ++i)
+        v.addAtBack(t[i]);
+
+    u.printSolution();
+    v.printSolution();
+    cout << "Cost U+V: " << u.getCost() + v.getCost() << endl;
+
+    bool result = false;
+
+    do{
+        cudaProfilerStart();
+        result = cudaLocalSearch(u, v, 1, 0);
+        cudaProfilerStop();
+        cout << result << endl;
+    } while (result == true);
+
+    u.printSolution();
+    v.printSolution();
+    //u.calculateCost();
+    //u.printSolution();
+
+
 }
 
 void ESCoevolMDVRP::testFunction(MDVRPProblem* problem, AlgorithmConfig* config, Community* community) {
 
-    PathRelinking pathRelinking = PathRelinking(problem, config);
-    
-    community->getEliteGroup()->getEliteGroup().at(2).printSolution();
-    
-    pathRelinking.operate(community->getEliteGroup()->getEliteGroup().at(2), community->getEliteGroup()->getBest());
-
-    community->getEliteGroup()->getEliteGroup().at(2).printSolution();
+    //IndividualsGroup offsprings = IndividualsGroup(problem, config, 0);
+    //CudaSubpop::process(community->getSubpops().at(0), offsprings);
     
 }
